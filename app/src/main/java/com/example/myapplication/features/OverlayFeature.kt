@@ -18,7 +18,6 @@ class OverlayFeature(
     private var overlayView: View? = null
 
     fun show() {
-
         // 悬浮窗权限检查
         if (!OverlayPermissionHelper.hasPermission(activity)) {
             OverlayPermissionHelper.requestPermission(activity)
@@ -27,9 +26,9 @@ class OverlayFeature(
 
         if (overlayView != null) return
 
-        windowManager =
-            activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        windowManager = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
+        // 悬浮窗参数配置
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -45,6 +44,7 @@ class OverlayFeature(
         params.x = 300
         params.y = 600
 
+        // 创建悬浮窗视图
         val view = TextView(activity).apply {
             text = "🎙"
             textSize = 24f
@@ -54,7 +54,7 @@ class OverlayFeature(
             setPadding(40, 40, 40, 40)
         }
 
-        // 🎯 手势逻辑
+        // 触摸事件绑定（逻辑无变化）
         view.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {

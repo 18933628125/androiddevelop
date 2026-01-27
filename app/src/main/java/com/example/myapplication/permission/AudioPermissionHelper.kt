@@ -8,7 +8,7 @@ import androidx.core.content.ContextCompat
 
 object AudioPermissionHelper {
 
-    private const val REQUEST_CODE = 2001
+    const val REQUEST_CODE = 2001
 
     fun hasPermission(activity: Activity): Boolean {
         return ContextCompat.checkSelfPermission(
