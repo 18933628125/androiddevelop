@@ -29,13 +29,10 @@ class OverlayFeature(
     // 区分点击和拖动的阈值（超过这个距离判定为拖动）
     private val DRAG_THRESHOLD = 10f
     private var isDragging = false
-    // 长按相关变量
-    private val LONG_PRESS_DELAY = 300L // 长按判定时间（300毫秒）
-    private val handler = Handler(Looper.getMainLooper())
-    private var longPressRunnable: Runnable? = null
-    private var isLongPressTriggered = false // 是否触发了长按
-    // 悬浮窗固定尺寸（关键：解决宽窄变化）
-    private val BUTTON_SIZE = 120 // 按钮宽高（单位：px，可自定义）
+    // 新增：录音状态标记（用于点击切换）
+    private var isRecording = false
+    // 悬浮窗尺寸修改：从120px改为240px（两倍大小）
+    private val BUTTON_SIZE = 240 // 按钮宽高（单位：px）
 
     fun show() {
         // 悬浮窗权限检查
@@ -48,10 +45,10 @@ class OverlayFeature(
 
         windowManager = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
-        // 初始化悬浮窗参数（改为固定尺寸，不再WRAP_CONTENT）
+        // 初始化悬浮窗参数（尺寸改为240px）
         params = WindowManager.LayoutParams(
-            BUTTON_SIZE, // 固定宽度
-            BUTTON_SIZE, // 固定高度
+            BUTTON_SIZE, // 放大后的宽度（原120→240）
+            BUTTON_SIZE, // 放大后的高度（原120→240）
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             else
@@ -64,44 +61,28 @@ class OverlayFeature(
         params?.x = 300
         params?.y = 600
 
-        // 创建悬浮窗视图（统一样式，固定尺寸）
+        // 创建悬浮窗视图（尺寸放大，文字也同步放大）
         val view = TextView(activity).apply {
             text = "🎙"
-            textSize = 24f
+            textSize = 48f // 文字大小从24f改为48f（两倍）
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            // 移除系统背景，自定义圆角背景（避免样式不一致）
+            // 自定义圆角背景（适配放大后的尺寸）
             background = createRoundBackground(Color.parseColor("#88000000"))
             // 强制设置视图尺寸（双重保障）
             layoutParams = ViewGroup.LayoutParams(BUTTON_SIZE, BUTTON_SIZE)
         }
 
-        // 初始化长按Runnable
-        longPressRunnable = Runnable {
-            if (!isDragging) {
-                // 非拖动状态下，触发长按录音
-                isLongPressTriggered = true
-                audioRecordFeature.startRecord()
-                // 切换为红色背景（保持样式一致）
-                view.background = createRoundBackground(Color.RED)
-            }
-        }
-
-        // 核心：重构触摸事件，支持拖动+录音
+        // 核心修改：重构触摸事件，改为「点击切换录音」+ 拖动
         view.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    // 记录初始位置
+                    // 记录初始位置（用于拖动）
                     initialX = params?.x?.toFloat() ?: 0f
                     initialY = params?.y?.toFloat() ?: 0f
-                    // 记录触摸点相对于视图的位置
                     initialTouchX = event.rawX
                     initialTouchY = event.rawY
-                    // 重置状态
-                    isDragging = false
-                    isLongPressTriggered = false
-                    // 延迟触发长按检测
-                    handler.postDelayed(longPressRunnable!!, LONG_PRESS_DELAY)
+                    isDragging = false // 重置拖动状态
                     true
                 }
 
@@ -113,21 +94,19 @@ class OverlayFeature(
                     // 判断是否为拖动（超过阈值）
                     if (dx.absoluteValue > DRAG_THRESHOLD || dy.absoluteValue > DRAG_THRESHOLD) {
                         isDragging = true
-                        // 取消长按检测（拖动时不触发录音）
-                        handler.removeCallbacks(longPressRunnable!!)
                         // 更新悬浮窗位置
                         params?.x = (initialX + dx).toInt()
                         params?.y = (initialY + dy).toInt()
 
-                        // 获取屏幕尺寸
+                        // 获取屏幕尺寸（适配放大后的按钮边界）
                         val displayMetrics = activity.resources.displayMetrics
                         val screenWidth = displayMetrics.widthPixels
                         val screenHeight = displayMetrics.heightPixels
 
-                        // 左右边界（适配固定尺寸）
+                        // 左右边界（适配240px尺寸）
                         params?.x = params?.x?.coerceAtLeast(0) ?: 0
                         params?.x = params?.x?.coerceAtMost(screenWidth - BUTTON_SIZE) ?: 0
-                        // 上下边界（适配固定尺寸）
+                        // 上下边界（适配240px尺寸）
                         params?.y = params?.y?.coerceAtLeast(0) ?: 0
                         params?.y = params?.y?.coerceAtMost(screenHeight - BUTTON_SIZE) ?: 0
 
@@ -138,33 +117,17 @@ class OverlayFeature(
                 }
 
                 MotionEvent.ACTION_UP -> {
-                    // 取消长按检测
-                    handler.removeCallbacks(longPressRunnable!!)
-
                     if (isDragging) {
-                        // 拖动结束，不处理录音
+                        // 拖动结束，不处理点击
                         isDragging = false
-                    } else if (isLongPressTriggered) {
-                        // 长按后松开，停止录音
-                        audioRecordFeature.stopRecord()
-                        // 恢复默认背景（保持样式一致）
-                        view.background = createRoundBackground(Color.parseColor("#88000000"))
-                        isLongPressTriggered = false
+                    } else {
+                        // 未拖动 = 点击事件 → 切换录音状态
+                        toggleRecording(v as TextView)
                     }
                     true
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
-                    // 取消长按检测
-                    handler.removeCallbacks(longPressRunnable!!)
-
-                    if (isLongPressTriggered) {
-                        // 取消事件，停止录音
-                        audioRecordFeature.stopRecord()
-                        // 恢复默认背景
-                        view.background = createRoundBackground(Color.parseColor("#88000000"))
-                        isLongPressTriggered = false
-                    }
                     isDragging = false
                     true
                 }
@@ -178,21 +141,43 @@ class OverlayFeature(
     }
 
     /**
-     * 自定义圆角背景（统一样式，避免宽窄变化）
+     * 新增：切换录音状态（点击一次开始，再点击一次停止）
+     */
+    private fun toggleRecording(btn: TextView) {
+        if (!isRecording) {
+            // 开始录音
+            audioRecordFeature.startRecord()
+            isRecording = true
+            // 按钮样式改为录音中（红色背景）
+            btn.background = createRoundBackground(Color.RED)
+            btn.text = "⏹" // 切换为停止图标
+        } else {
+            // 停止录音
+            audioRecordFeature.stopRecord()
+            isRecording = false
+            // 恢复按钮默认样式
+            btn.background = createRoundBackground(Color.parseColor("#88000000"))
+            btn.text = "🎙" // 恢复为录音图标
+        }
+    }
+
+    /**
+     * 自定义圆角背景（适配放大后的圆形按钮）
      */
     private fun createRoundBackground(color: Int): GradientDrawable {
         return GradientDrawable().apply {
-            shape = GradientDrawable.OVAL // 圆形（也可以用RECTANGLE+cornerRadius做圆角矩形）
+            shape = GradientDrawable.OVAL // 圆形
             setColor(color)
-            // 可选：添加边框
-            // setStroke(2, Color.WHITE)
-            alpha = 200 // 透明度（和之前保持一致）
+            alpha = 200 // 透明度保持不变
         }
     }
 
     fun hide() {
-        // 清理handler回调
-        handler.removeCallbacks(longPressRunnable!!)
+        // 隐藏时如果正在录音，先停止
+        if (isRecording) {
+            audioRecordFeature.stopRecord()
+            isRecording = false
+        }
         // 移除悬浮窗
         overlayView?.let {
             windowManager?.removeView(it)
