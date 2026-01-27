@@ -18,16 +18,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // 初始化功能类
         audioRecordFeature = AudioRecordFeature(this)
         overlayFeature = OverlayFeature(this, audioRecordFeature)
-
-        // 显示悬浮窗
         overlayFeature.show()
     }
 
     /**
-     * 处理权限申请结果回调
+     * 仅处理**录音权限**回调（删除截图权限相关代码）
      */
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -47,9 +44,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 应用销毁时清理资源
-     */
     override fun onDestroy() {
         super.onDestroy()
         overlayFeature.hide()
