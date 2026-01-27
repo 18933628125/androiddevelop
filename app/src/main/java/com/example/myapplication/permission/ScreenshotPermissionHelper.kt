@@ -1,42 +1,45 @@
 package com.example.myapplication.permission
 
-import android.Manifest
 import android.app.Activity
-import android.content.pm.PackageManager
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import android.content.Intent
+import android.media.projection.MediaProjectionManager
+import android.os.Build
+import android.util.Log
 
 object ScreenshotPermissionHelper {
-    const val REQUEST_CODE = 2002
+    private val TAG = "ScreenshotPermissionHelper"
+    // 权限请求码
+    const val REQUEST_CODE_STORAGE = 2002
+    const val REQUEST_CODE_SCREEN_CAPTURE = 3001
+
+    // 全局保存MediaProjection授权结果（截图用）
+    var mediaProjectionResultData: Intent? = null
 
     /**
-     * 检查截图所需的存储权限（Android 10以下需要WRITE_EXTERNAL_STORAGE）
+     * 检查截图所需的所有权限（存储+屏幕捕获）
      */
-    fun hasStoragePermission(activity: Activity): Boolean {
-        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            // Android 10+ 无需WRITE权限，直接返回true
-            true
-        } else {
-            ContextCompat.checkSelfPermission(
-                activity,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
-        }
+    fun hasAllScreenshotPermissions(activity: Activity): Boolean {
+        // 屏幕捕获权限（Android 5.0+ 必需）
+        val hasScreenCapture = mediaProjectionResultData != null
+        // 存储权限（仅Android 10以下需要，这里已改用私有目录，实际可忽略）
+        val hasStorage = true
+
+        return hasScreenCapture && hasStorage
     }
 
     /**
-     * 请求存储权限（仅Android 10以下需要）
+     * 申请屏幕捕获权限（系统级弹窗，核心）
      */
-    fun requestStoragePermission(activity: Activity) {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
-            ActivityCompat.requestPermissions(
-                activity,
-                arrayOf(
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                    Manifest.permission.READ_EXTERNAL_STORAGE
-                ),
-                REQUEST_CODE
-            )
+    fun requestScreenCapturePermission(activity: Activity) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            Log.e(TAG, "屏幕捕获功能仅支持Android 5.0及以上")
+            return
         }
+
+        // 获取MediaProjectionManager系统服务
+        val mediaProjectionManager = activity.getSystemService(Activity.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        // 启动权限申请弹窗
+        val intent = mediaProjectionManager.createScreenCaptureIntent()
+        activity.startActivityForResult(intent, REQUEST_CODE_SCREEN_CAPTURE)
     }
 }

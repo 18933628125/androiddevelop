@@ -13,11 +13,11 @@ class AudioRecordFeature(
 ) {
     private var isRecording = false
     private var outputFile: File? = null
-    // 初始化截图功能类（共享同目录）
+    // 初始化截图功能类（全局截图）
     private val screenshotFeature = ScreenshotFeature(activity)
 
     fun startRecord() {
-        // 仅检查录音权限（无需存储权限）
+        // 检查录音权限
         if (!AudioPermissionHelper.hasPermission(activity)) {
             AudioPermissionHelper.requestPermission(activity)
             Log.e("AudioRecord", "没有录音权限，已请求")
@@ -25,10 +25,10 @@ class AudioRecordFeature(
         }
         if (isRecording) return
 
-        // 创建录音文件：和截图**同目录**（应用外部私有目录）
+        // 创建录音文件（和截图同目录）
         outputFile = createOutputFile()
         if (outputFile == null) {
-            Log.e("AudioRecord", "录音文件创建失败，无法开始录音")
+            Log.e("AudioRecord", "录音文件创建失败")
             return
         }
 
@@ -61,40 +61,35 @@ class AudioRecordFeature(
             }
             activity.startService(stopIntent)
 
-            // 录音结束后**立即截图**，和录音同目录（无权限限制）
+            // 触发全局截图（支持后台）
             screenshotFeature.takeScreenshot()
 
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
             isRecording = false
-            Log.d("AudioRecord", "停止后台录音，已触发自动截图")
+            Log.d("AudioRecord", "停止录音，已触发全局截图")
         }
     }
 
     /**
-     * 创建录音文件：和截图共享【应用外部私有目录】的Test文件夹
-     * 复用截图类的目录检查/创建逻辑，保证一致性
+     * 创建录音文件（和截图同目录）
      */
     private fun createOutputFile(): File? {
         val saveDir = screenshotFeature.getSaveDir()
-        // 复用截图类的目录检查/创建方法，确保目录就绪
         val isDirReady = checkAndCreateDir(saveDir)
         if (!isDirReady) {
             Log.e("AudioRecord", "录音目录准备失败")
             return null
         }
-        // 录音文件命名：和截图同规则
         return File(saveDir, "audio_${System.currentTimeMillis()}.m4a")
     }
 
     /**
-     * 复用截图类的目录检查/创建逻辑（保证统一）
+     * 检查并创建目录
      */
     private fun checkAndCreateDir(dir: File): Boolean {
-        if (dir.exists() && dir.isDirectory) {
-            return true
-        }
+        if (dir.exists() && dir.isDirectory) return true
         return dir.mkdirs()
     }
 }
