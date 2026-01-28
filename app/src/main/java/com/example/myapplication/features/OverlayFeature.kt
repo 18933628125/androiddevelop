@@ -6,9 +6,12 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.util.Log
 import android.view.*
 import android.widget.TextView
 import com.example.myapplication.permission.OverlayPermissionHelper
+import com.example.myapplication.utils.HttpUtils
+import java.io.File
 import kotlin.math.absoluteValue
 
 class OverlayFeature(
@@ -28,6 +31,8 @@ class OverlayFeature(
     private var isDragging = false
     // 录音状态
     private var isRecording = false
+    // 新增：冻结状态（录音+截图完成后不可点击）
+    private var isFrozen = false
     // 按钮尺寸（原120→240，放大两倍）
     private val BUTTON_SIZE = 240
 
@@ -70,6 +75,7 @@ class OverlayFeature(
 
         // 触摸事件：拖动+点击切换录音
         view.setOnTouchListener { v, event ->
+            // 新增：冻结状态下不响应点击（仍可拖动）
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     // 记录初始位置
@@ -111,8 +117,11 @@ class OverlayFeature(
                     if (isDragging) {
                         isDragging = false
                     } else {
-                        // 点击切换录音
-                        toggleRecording(v as TextView)
+                        // 新增：冻结状态下不执行点击逻辑
+                        if (!isFrozen) {
+                            // 点击切换录音
+                            toggleRecording(v as TextView)
+                        }
                     }
                     true
                 }
@@ -144,8 +153,38 @@ class OverlayFeature(
             // 停止录音
             audioRecordFeature.stopRecord()
             isRecording = false
-            btn.background = createRoundBackground(Color.parseColor("#88000000"))
-            btn.text = "🎙" // 录音图标
+            // 新增：冻结按钮+修改图标
+            isFrozen = true
+            btn.background = createRoundBackground(Color.parseColor("#88888888")) // 灰色
+            btn.text = "⌛" // 加载图标
+        }
+    }
+
+    /**
+     * 新增：发送数据到后端并处理结果
+     */
+    fun sendDataToBackend(audioFile: File?, screenshotFile: File?, threadId: String) {
+        activity.runOnUiThread {
+            // 更新按钮为加载状态
+            (overlayView as? TextView)?.text = "⌛"
+        }
+
+        // 调用网络工具类发送数据
+        HttpUtils.sendInitDecision(threadId, audioFile, screenshotFile) { isSuccess, response, error ->
+            activity.runOnUiThread {
+                if (isSuccess) {
+                    Log.d("OverlayFeature", "后端返回数据：$response")
+                    // 可选：打印到控制台（也可以Toast显示）
+                    (overlayView as? TextView)?.text = "✅" // 成功图标
+                } else {
+                    Log.e("OverlayFeature", "发送失败：$error")
+                    (overlayView as? TextView)?.text = "❌" // 失败图标
+                }
+                // 可选：解锁按钮（根据需求决定是否解锁）
+                // isFrozen = false
+                // (overlayView as? TextView)?.text = "🎙"
+                // (overlayView as? TextView)?.background = createRoundBackground(Color.parseColor("#88000000"))
+            }
         }
     }
 
@@ -172,5 +211,17 @@ class OverlayFeature(
         }
         overlayView = null
         params = null
+        // 重置冻结状态
+        isFrozen = false
+    }
+
+    // 新增：解锁按钮（可选）
+    fun unfreeze() {
+        isFrozen = false
+        (overlayView as? TextView)?.apply {
+            text = "🎙"
+            background = createRoundBackground(Color.parseColor("#88000000"))
+        }
+        audioRecordFeature.reset()
     }
 }

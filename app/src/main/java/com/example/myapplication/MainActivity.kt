@@ -13,20 +13,27 @@ import com.example.myapplication.features.CircleOverlayFeature
 import com.example.myapplication.features.OverlayFeature
 import com.example.myapplication.permission.AudioPermissionHelper
 import com.example.myapplication.permission.ScreenshotPermissionHelper
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var overlayFeature: OverlayFeature
     private lateinit var audioRecordFeature: AudioRecordFeature
-    // 修正：传入lifecycleScope
     private lateinit var circleOverlayFeature: CircleOverlayFeature
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // 初始化录音功能类（新增回调）
+        audioRecordFeature = AudioRecordFeature(this) { audioFile, screenshotFile, threadId ->
+            // 录音+截图完成后的回调
+            Log.d("MainActivity", "录音+截图完成，开始发送数据到后端")
+            // 通知悬浮窗发送数据
+            overlayFeature.sendDataToBackend(audioFile, screenshotFile, threadId)
+        }
+
         // 初始化原有功能类
-        audioRecordFeature = AudioRecordFeature(this)
         overlayFeature = OverlayFeature(this, audioRecordFeature)
         // 初始化圆形悬浮窗：传入Activity和lifecycleScope
         circleOverlayFeature = CircleOverlayFeature(this, lifecycleScope)

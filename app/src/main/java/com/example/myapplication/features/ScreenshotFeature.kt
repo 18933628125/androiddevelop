@@ -11,46 +11,47 @@ import java.io.File
 
 class ScreenshotFeature(private val activity: Activity) {
     private val TAG = "ScreenshotFeature"
-    // 和录音同目录：应用外部私有目录的Test文件夹
     private val baseSaveDir by lazy { File(activity.getExternalFilesDir(null), "Test") }
+    private var latestScreenshotFile: File? = null
 
     /**
-     * 执行全局屏幕截图（通过前台服务，兼容Android 12+）
-     * @return 截图文件路径（失败返回null）
+     * 执行全局屏幕截图（异步版本，解决时间差问题）
+     * @param threadId 线程ID
+     * @param callback 截图完成回调
      */
-    fun takeScreenshot(): String? {
-        // 1. 检查并创建目标目录
-        val isDirReady = checkAndCreateDir(baseSaveDir)
-        if (!isDirReady) {
-            Log.e(TAG, "目标目录准备失败，无法保存截图")
-            return null
+    fun takeScreenshotAsync(threadId: String, callback: (File?) -> Unit) {
+        // 1. 检查基础条件
+        if (!checkAndCreateDir(baseSaveDir)) {
+            Log.e(TAG, "目标目录准备失败")
+            callback(null)
+            return
         }
-        val saveDirPath = baseSaveDir.absolutePath
-        Log.d(TAG, "截图保存目录：$saveDirPath")
 
-        // 2. 检查Android版本（MediaProjection仅支持5.0+）
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
-            Log.e(TAG, "全局截图仅支持Android 5.0及以上系统")
-            return null
+            Log.e(TAG, "仅支持Android 5.0+")
+            callback(null)
+            return
         }
 
-        // 3. 检查屏幕捕获权限
         val resultData = ScreenshotPermissionHelper.mediaProjectionResultData
         if (resultData == null) {
-            // 未授权，先申请权限
-            ScreenshotPermissionHelper.requestScreenCapturePermission(activity)
-            Log.w(TAG, "未获取屏幕捕获权限，已触发权限申请")
-            return null
+            Log.w(TAG, "无截图权限")
+            callback(null)
+            return
         }
-        Log.d(TAG, "已获取MediaProjection授权数据")
 
-        // 4. 启动屏幕捕获前台服务（核心修复：显式传递参数）
+        // 2. 构建截图文件对象
+        val screenshotFile = File(baseSaveDir, "screenshot_$threadId.png")
+        latestScreenshotFile = screenshotFile
+        Log.d(TAG, "准备生成截图文件：${screenshotFile.absolutePath}")
+
+        // 3. 启动截图服务
         val intent = Intent(activity, ScreenCaptureService::class.java).apply {
             action = ScreenCaptureService.ACTION_CAPTURE_SCREEN
-            // 传递保存目录（确保非空）
-            putExtra(ScreenCaptureService.EXTRA_SAVE_DIR, saveDirPath)
-            // 修复：显式设置类加载器传递Parcelable
+            putExtra(ScreenCaptureService.EXTRA_SAVE_DIR, baseSaveDir.absolutePath)
             putExtra(ScreenCaptureService.EXTRA_MEDIA_PROJECTION_DATA, resultData as Parcelable)
+            putExtra("thread_id", threadId)
+            putExtra("screenshot_filename", screenshotFile.name)
         }
 
         try {
@@ -59,35 +60,68 @@ class ScreenshotFeature(private val activity: Activity) {
             } else {
                 activity.startService(intent)
             }
-            Log.d(TAG, "屏幕捕获前台服务启动成功")
+            Log.d(TAG, "截图服务启动成功，thread_id：$threadId")
         } catch (e: Exception) {
-            e.printStackTrace()
-            Log.e(TAG, "启动屏幕捕获服务失败：${e.message}")
+            Log.e(TAG, "启动截图服务失败：${e.message}")
+            callback(null)
+            return
         }
 
-        return saveDirPath // 返回目录（实际路径在服务中生成）
+        // 4. 智能等待：最多等5秒，文件生成后立即回调
+        Thread {
+            var waitTime = 0
+            val maxWaitTime = 5000 // 延长到5秒
+            val checkInterval = 200 // 每200ms检查一次
+
+            while (waitTime < maxWaitTime) {
+                if (screenshotFile.exists() && screenshotFile.length() > 0) {
+                    Log.d(TAG, "截图文件生成成功：${screenshotFile.length()}字节")
+                    callback(screenshotFile)
+                    return@Thread
+                }
+                Thread.sleep(checkInterval.toLong())
+                waitTime += checkInterval
+                Log.d(TAG, "等待截图生成... $waitTime/$maxWaitTime ms")
+            }
+
+            // 超时检查：即使文件存在但为空也返回null
+            if (screenshotFile.exists() && screenshotFile.length() > 0) {
+                Log.d(TAG, "截图生成（超时前最后检查）")
+                callback(screenshotFile)
+            } else {
+                Log.e(TAG, "截图生成超时，文件不存在或为空")
+                callback(null)
+            }
+        }.start()
     }
 
     /**
-     * 检查目录，不存在则创建
+     * 同步截图方法（兼容原有逻辑）
      */
+    fun takeScreenshot(threadId: String): File? {
+        var result: File? = null
+        val lock = Object()
+
+        takeScreenshotAsync(threadId) { file ->
+            result = file
+            synchronized(lock) {
+                lock.notify()
+            }
+        }
+
+        synchronized(lock) {
+            lock.wait(5000) // 最多等5秒
+        }
+
+        return result
+    }
+
     private fun checkAndCreateDir(dir: File): Boolean {
-        if (dir.exists() && dir.isDirectory) {
-            Log.d(TAG, "目录已存在：${dir.absolutePath}")
-            return true
-        }
-        val isCreated = dir.mkdirs()
-        if (isCreated) {
-            Log.d(TAG, "目录创建成功：${dir.absolutePath}")
-            return true
-        } else {
-            Log.e(TAG, "目录创建失败：${dir.absolutePath}")
-            return false
-        }
+        if (dir.exists() && dir.isDirectory) return true
+        return dir.mkdirs()
     }
 
-    /**
-     * 对外提供保存目录（给录音功能调用）
-     */
     fun getSaveDir(): File = baseSaveDir
+    fun getLatestScreenshotFile(): File? = latestScreenshotFile
+    fun takeScreenshot(): File? = takeScreenshot(System.currentTimeMillis().toString())
 }
