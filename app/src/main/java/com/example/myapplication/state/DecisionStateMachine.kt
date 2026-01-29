@@ -78,7 +78,7 @@ class DecisionStateMachine(
         // 解析点击参数
         val x = (data["x"] as? Double ?: 0.0).toInt()
         val y = (data["y"] as? Double ?: 0.0).toInt()
-        val radius = (data["radius"] as? Double ?: 30.0).toInt()
+        val radius = (data["radiu"] as? Double ?: 30.0).toInt()
 
         // 显示提示信息
         showToast("请点击绿色圆框位置：($x, $y)")
@@ -161,7 +161,8 @@ class DecisionStateMachine(
      * 发送反馈请求到/decision/feedback
      */
     private fun sendFeedbackRequest(screenshotFile: File) {
-        HttpUtils.sendFeedback(
+        Log.d(TAG, "进入反馈状态，延迟2秒发送feedback请求")
+        handler.postDelayed({HttpUtils.sendFeedback(
             threadId = threadId,
             imageFile = screenshotFile,
             callback = { isSuccess, response, errorMsg ->
@@ -174,7 +175,7 @@ class DecisionStateMachine(
                     enterEndState()
                 }
             }
-        )
+        )},2000)
     }
 
     /**
@@ -196,7 +197,7 @@ class DecisionStateMachine(
                 "click" -> {
                     data["x"] = keyValuePairs["x"]?.toDouble() ?: 0.0
                     data["y"] = keyValuePairs["y"]?.toDouble() ?: 0.0
-                    data["radius"] = keyValuePairs["radius"]?.toDouble() ?: 0.0
+                    data["radiu"] = keyValuePairs["radiu"]?.toDouble() ?: 0.0
                 }
                 "wait" -> {
                     data["seconds"] = keyValuePairs["seconds"]?.toDouble() ?: 0.0

@@ -48,9 +48,9 @@ class MainActivity : AppCompatActivity() {
 
             // 冷冻录音（更新图标）
             overlayFeature.freezeRecord()
-
+            Log.d("MainActivity", "录音+截图完成，延迟2秒发送初始请求")
             // 发送初始请求到/decision/init
-            HttpUtils.sendInitDecision(
+            mainHandler.postDelayed({HttpUtils.sendInitDecision(
                 threadId = threadId,
                 audioFile = audioFile,
                 imageFile = screenshotFile,
@@ -65,7 +65,7 @@ class MainActivity : AppCompatActivity() {
                         overlayFeature.unfreezeRecord()
                     }
                 }
-            )
+            )},2000)
         }
 
         // 初始化悬浮窗（包含录音图标）
@@ -131,7 +131,7 @@ class MainActivity : AppCompatActivity() {
                 "click" -> {
                     data["x"] = keyValuePairs["x"]?.toDouble() ?: 0.0
                     data["y"] = keyValuePairs["y"]?.toDouble() ?: 0.0
-                    data["radius"] = keyValuePairs["radius"]?.toDouble() ?: 0.0
+                    data["radiu"] = keyValuePairs["radiu"]?.toDouble() ?: 0.0
                 }
                 "wait" -> {
                     data["seconds"] = keyValuePairs["seconds"]?.toDouble() ?: 0.0
