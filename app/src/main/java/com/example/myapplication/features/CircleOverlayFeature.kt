@@ -1,6 +1,7 @@
 package com.example.myapplication.features
 
 import android.app.Activity
+import android.content.Context
 import android.graphics.*
 import android.os.Build
 import android.util.DisplayMetrics
@@ -24,194 +25,196 @@ class CircleOverlayFeature(
     private val TAG = "CircleOverlayFeature"
     private var windowManager: WindowManager? = null
     private var circleView: View? = null
-    private var params: WindowManager.LayoutParams? = null
-    private var targetClickX = 0
-    private var targetClickY = 0
+    private var layoutParams: WindowManager.LayoutParams? = null
+
+    // 最终使用的【物理屏幕绝对坐标】，左上角(0,0)
+    private var absoluteClickX = 0f
+    private var absoluteClickY = 0f
+    private var circleRadius = 0
+
     private var isShowing = false
 
-    // 完全保留你的原始方法，仅新增onClick回调适配状态机
+    /**
+     * 外部调用不变，仍然传入千分比 x, y, radiu
+     * x: 0~1000 ‰ 屏幕宽度
+     * y: 0~1000 ‰ 屏幕高度
+     * 内部全部转换为【物理屏幕绝对坐标】，不受状态栏影响
+     */
     fun showCircleOverlay(
         x: Int,
         y: Int,
         r: Int,
-        onClick: () -> Unit = {} // 仅新增：点击回调，不影响原有逻辑
+        onClick: () -> Unit = {}
     ) {
-        // ========== 新增：百分比转真实屏幕坐标 ==========
-        // 1. 获取屏幕真实尺寸（包含导航栏/状态栏）
-        val displayMetrics = DisplayMetrics()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            activity.display?.getRealMetrics(displayMetrics)
-        } else {
-            @Suppress("DEPRECATION")
-            activity.windowManager.defaultDisplay.getRealMetrics(displayMetrics)
-        }
-        val screenWidth = displayMetrics.widthPixels  // 屏幕总宽度
-        val screenHeight = displayMetrics.heightPixels // 屏幕总高度
-
-        // 2. 百分比转换（后端返回的x=614 → 61.4%，y=510→51.0%）
-        val realX = (screenWidth * (x.toFloat() / 1000)).toInt()
-        val realY = (screenHeight * (y.toFloat() / 1000)).toInt()
-        val realR = r // radius是绝对值，无需转换
-
-        Log.d(TAG, "百分比转换：x=$x(%) → $realX(px)，y=$y(%) → $realY(px)，屏幕尺寸=${screenWidth}x${screenHeight}")
-
-
-        // 1. 保留你的原始权限检查逻辑
+        // 权限检查
         if (!OverlayPermissionHelper.hasPermission(activity)) {
             OverlayPermissionHelper.requestPermission(activity)
+            Toast.makeText(activity, "请授予悬浮窗权限", Toast.LENGTH_LONG).show()
             return
         }
-
         if (!AssistsPermissionHelper.isAssistsEnabled(activity)) {
-            Toast.makeText(activity, "请先开启辅助功能权限！", Toast.LENGTH_LONG).show()
+            Toast.makeText(activity, "请开启辅助功能", Toast.LENGTH_LONG).show()
             AssistsPermissionHelper.openAssistsSettings(activity)
             return
         }
 
-        // 2. 保留你的原始坐标保存逻辑
-        targetClickX = realX
-        targetClickY = realY
+        // 1. 计算【物理屏幕真实宽高】（不再获取状态栏高度）
+        val realScreenSize = getRealScreenSize()
+        val screenWidth = realScreenSize.first
+        val screenHeight = realScreenSize.second
+
+        Log.d(TAG, "物理屏幕真实宽高: ${screenWidth}x$screenHeight")
+
+        // 2. 千分比 → 物理屏幕绝对坐标（0,0 = 屏幕最左上角）
+        val percentX = x / 1000f
+        val percentY = y / 1000f
+        val rawX = screenWidth * percentX
+        val rawY = screenHeight * percentY
+
+        Log.d(TAG, "千分比转换后原始坐标: ($rawX, $rawY)")
+
+        // 3. 不再减去状态栏高度！直接使用原始物理坐标
+        absoluteClickX = rawX
+        absoluteClickY = rawY
+        circleRadius = r
+
+        val overlayX = rawX.toInt()
+        val overlayY = rawY.toInt()
+
+        Log.d(TAG, "最终物理点击坐标(AssistsCore使用): ($absoluteClickX, $absoluteClickY)")
+        Log.d(TAG, "悬浮窗实际布局坐标: ($overlayX, $overlayY)")
+
+        // 先隐藏旧视图
         hideCircleOverlay()
 
-        // 3. 保留你的原始WindowManager获取逻辑
-        windowManager = activity.getSystemService(WindowManager::class.java)
+        windowManager = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
-        // 4. 完全保留你的自定义View绘制逻辑
+        // 4. 自定义绘制绿色实心圆
         circleView = object : View(activity) {
-            private val paint = Paint().apply {
-                color = Color.GREEN
+            private val circlePaint = Paint().apply {
                 isAntiAlias = true
-                alpha = 180
+                color = Color.GREEN
+                alpha = 160
+                style = Paint.Style.FILL
             }
 
             override fun onDraw(canvas: Canvas) {
                 super.onDraw(canvas)
-                val centerX = width / 2f
-                val centerY = height / 2f
-                canvas.drawCircle(centerX, centerY, r.toFloat(), paint) // 你的原始绘制逻辑
+                val cx = width / 2f
+                val cy = height / 2f
+                canvas.drawCircle(cx, cy, circleRadius.toFloat(), circlePaint)
             }
 
             override fun onTouchEvent(event: MotionEvent): Boolean {
                 if (event.action == MotionEvent.ACTION_UP) {
                     hideCircleOverlay()
-                    // 保留你的原始延迟50ms逻辑
-                    activity.window.decorView.postDelayed({
-                        simulateClickUnderOverlay()
-                        onClick.invoke() // 仅新增：触发状态机回调
-                    }, 50)
-                    return false // 保留你的原始返回值
+                    // 延迟执行，保证圆先消失再点击
+                    postDelayed({
+                        performAssistsClick()
+                        onClick()
+                    }, 30)
+                    return true
                 }
-                return true // 保留你的原始返回值
+                return true
             }
         }
 
-        // 5. 完全保留你的原始Window参数逻辑（核心：坐标计算正确）
-        val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        // 5. 关键 Window 参数，强制全屏、无视系统栏
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
             @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        params = WindowManager.LayoutParams(
-            r * 2,
-            r * 2,
-            layoutType,
-            // 保留你的原始flags（无多余flags）
+        val flags =
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                    or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                    or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                .or(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
+                .or(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
+                .or(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                .or(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+
+        layoutParams = WindowManager.LayoutParams(
+            circleRadius * 2,
+            circleRadius * 2,
+            type,
+            flags,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START // 保留你的原始gravity
-            // 核心：保留你的原始坐标计算（这是坐标正确的关键）
-            this.x = targetClickX - r
-            this.y = targetClickY - r
+            gravity = Gravity.TOP or Gravity.LEFT
+            // 直接使用原始物理坐标，不再减半径外的任何值
+            this.x = overlayX - circleRadius
+            this.y = overlayY - circleRadius
 
-            // 仅新增：适配Android P+的刘海屏（不影响坐标）
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
         }
 
-        // 6. 保留你的原始添加逻辑，仅新增日志
+        // 6. 添加到窗口
         try {
-            windowManager?.addView(circleView, params)
+            windowManager?.addView(circleView, layoutParams)
             isShowing = true
-            Log.d(TAG, "圆形悬浮窗显示成功：圆心($targetClickX, $targetClickY)，半径$r，左上角坐标(${params?.x}, ${params?.y})")
+            Log.d(TAG, "绿色实心圆已显示（物理屏幕坐标系）")
         } catch (e: Exception) {
-            Log.e(TAG, "显示悬浮窗失败：${e.message}", e)
-            e.printStackTrace()
+            Log.e(TAG, "添加悬浮窗失败", e)
+            Toast.makeText(activity, "显示点击区域失败", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // 7. 完全保留你的原始AssistsCore模拟点击逻辑
-    private fun simulateClickUnderOverlay() {
+    /**
+     * 获取物理屏幕真实分辨率（包含状态栏、导航栏）
+     */
+    private fun getRealScreenSize(): Pair<Int, Int> {
+        val metrics = DisplayMetrics()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            activity.display?.getRealMetrics(metrics)
+        } else {
+            @Suppress("DEPRECATION")
+            activity.windowManager.defaultDisplay.getRealMetrics(metrics)
+        }
+        return metrics.widthPixels to metrics.heightPixels
+    }
+
+    /**
+     * 使用 AssistsCore 在【物理屏幕绝对坐标】执行点击
+     */
+    private fun performAssistsClick() {
         coroutineScope.launch(Dispatchers.Main) {
             try {
                 if (!AssistsPermissionHelper.isAssistsEnabled(activity)) {
-                    Toast.makeText(activity, "辅助功能权限已关闭！", Toast.LENGTH_SHORT).show()
-                    AssistsPermissionHelper.openAssistsSettings(activity)
+                    Toast.makeText(activity, "辅助功能未开启", Toast.LENGTH_SHORT).show()
                     return@launch
                 }
 
-                val xFloat = targetClickX.toFloat()
-                val yFloat = targetClickY.toFloat()
+                Log.d(TAG, "执行模拟点击: ($absoluteClickX, $absoluteClickY)")
+                val success = AssistsCore.gestureClick(absoluteClickX, absoluteClickY, 200L)
 
-                // 保留你的200ms点击时长
-                val duration = 200
-
-                // 核心：你的AssistsCore穿透点击逻辑
-                val isSuccess = AssistsCore.gestureClick(xFloat, yFloat, duration.toLong())
-
-                if (isSuccess) {
-                    Toast.makeText(activity, "模拟点击指令发送成功！", Toast.LENGTH_SHORT).show()
-                    Log.d(TAG, "模拟点击坐标($xFloat, $yFloat)，时长$duration ms，指令发送成功")
+                if (success) {
+                    Toast.makeText(activity, "点击成功", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(activity, "模拟点击指令发送失败！", Toast.LENGTH_SHORT).show()
-                    Log.e(TAG, "模拟点击指令发送失败")
+                    Toast.makeText(activity, "点击失败", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(activity, "模拟点击异常：${e.message}", Toast.LENGTH_SHORT).show()
-                Log.e(TAG, "调用Assists API失败：${e.message}", e)
-                e.printStackTrace()
+                Log.e(TAG, "模拟点击异常", e)
+                Toast.makeText(activity, "点击异常: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    // 8. 保留你的原始坐标转换方法
-    fun getRealScreenCoordinate(x: Int, y: Int): Pair<Int, Int> {
-        val decorView = activity.window.decorView
-        val location = IntArray(2)
-        decorView.getLocationOnScreen(location)
-        val realX = x - location[0]
-        val realY = y - location[1]
-        Log.d(TAG, "坐标转换：原始($x, $y) → 偏移(${location[0]}, ${location[1]}) → 真实($realX, $realY)")
-        return Pair(realX, realY)
-    }
-
-    // 9. 保留你的原始隐藏方法，仅新增日志
     fun hideCircleOverlay() {
         circleView?.let {
             try {
                 windowManager?.removeView(it)
-                Log.d(TAG, "悬浮窗已隐藏")
             } catch (e: Exception) {
-                Log.e(TAG, "隐藏悬浮窗失败：${e.message}", e)
-                e.printStackTrace()
+                Log.e(TAG, "移除悬浮窗失败", e)
             }
         }
         circleView = null
-        params = null
+        layoutParams = null
         isShowing = false
     }
 
-    // 10. 保留你的原始释放方法
-    fun release() {
-        hideCircleOverlay()
-        windowManager = null
-    }
-
-    // 新增：适配状态机的状态检查（非核心）
     fun isShowing(): Boolean = isShowing
+    fun release() = hideCircleOverlay()
 }
