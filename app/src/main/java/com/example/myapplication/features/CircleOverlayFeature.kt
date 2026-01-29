@@ -3,6 +3,7 @@ package com.example.myapplication.features
 import android.app.Activity
 import android.graphics.*
 import android.os.Build
+import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
@@ -35,6 +36,26 @@ class CircleOverlayFeature(
         r: Int,
         onClick: () -> Unit = {} // 仅新增：点击回调，不影响原有逻辑
     ) {
+        // ========== 新增：百分比转真实屏幕坐标 ==========
+        // 1. 获取屏幕真实尺寸（包含导航栏/状态栏）
+        val displayMetrics = DisplayMetrics()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            activity.display?.getRealMetrics(displayMetrics)
+        } else {
+            @Suppress("DEPRECATION")
+            activity.windowManager.defaultDisplay.getRealMetrics(displayMetrics)
+        }
+        val screenWidth = displayMetrics.widthPixels  // 屏幕总宽度
+        val screenHeight = displayMetrics.heightPixels // 屏幕总高度
+
+        // 2. 百分比转换（后端返回的x=614 → 61.4%，y=510→51.0%）
+        val realX = (screenWidth * (x.toFloat() / 1000)).toInt()
+        val realY = (screenHeight * (y.toFloat() / 1000)).toInt()
+        val realR = r // radius是绝对值，无需转换
+
+        Log.d(TAG, "百分比转换：x=$x(%) → $realX(px)，y=$y(%) → $realY(px)，屏幕尺寸=${screenWidth}x${screenHeight}")
+
+
         // 1. 保留你的原始权限检查逻辑
         if (!OverlayPermissionHelper.hasPermission(activity)) {
             OverlayPermissionHelper.requestPermission(activity)
@@ -48,8 +69,8 @@ class CircleOverlayFeature(
         }
 
         // 2. 保留你的原始坐标保存逻辑
-        targetClickX = x
-        targetClickY = y
+        targetClickX = realX
+        targetClickY = realY
         hideCircleOverlay()
 
         // 3. 保留你的原始WindowManager获取逻辑
