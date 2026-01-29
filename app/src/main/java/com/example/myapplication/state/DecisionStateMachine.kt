@@ -4,14 +4,11 @@ import android.app.Activity
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.Gravity
-import android.view.LayoutInflater
-import android.view.View
-import android.widget.TextView
 import android.widget.Toast
 import com.example.myapplication.R
 import com.example.myapplication.features.CircleOverlayFeature
 import com.example.myapplication.features.ScreenshotFeature
+import com.example.myapplication.features.WaitOverlayManager
 import com.example.myapplication.utils.HttpUtils
 import java.io.File
 
@@ -30,7 +27,7 @@ class DecisionStateMachine(
     private val handler = Handler(Looper.getMainLooper())
     private val mainHandler = Handler(Looper.getMainLooper()) // 主线程Handler
     private var currentState: State = State.IDLE
-    private var waitToast: Toast? = null // 等待状态的动态提示框
+    private lateinit var waitOverlayManager: WaitOverlayManager // 替换原有的Toast
     private var isRunning = false
 
     // 状态枚举
@@ -41,6 +38,11 @@ class DecisionStateMachine(
         WAIT,        // 等待状态（状态3）
         FEEDBACK,    // 反馈状态（状态4）
         END          // 结束状态（状态5）
+    }
+
+    init {
+        // 初始化等待悬浮窗管理器
+        waitOverlayManager = WaitOverlayManager(activity)
     }
 
     /**
@@ -103,7 +105,7 @@ class DecisionStateMachine(
     }
 
     /**
-     * 进入状态3：等待状态
+     * 进入状态3：等待状态（使用系统级悬浮窗，后台也可见）
      */
     private fun enterWaitState(data: Map<String, Any>) {
         currentState = State.WAIT
@@ -111,8 +113,8 @@ class DecisionStateMachine(
         var remainingSeconds = totalSeconds
         Log.d(TAG, "进入等待状态（状态3），总时长：$totalSeconds 秒")
 
-        // 显示动态倒计时提示框
-        updateWaitToast(remainingSeconds)
+        // 显示系统级等待悬浮窗（替代Toast，后台也可见）
+        waitOverlayManager.showWaitOverlay(remainingSeconds)
 
         // 倒计时逻辑
         val countdownRunnable = object : Runnable {
@@ -120,11 +122,11 @@ class DecisionStateMachine(
                 remainingSeconds -= 0.1
                 if (remainingSeconds > 0) {
                     // 更新倒计时显示
-                    updateWaitToast(remainingSeconds)
+                    waitOverlayManager.updateCountdown(remainingSeconds)
                     handler.postDelayed(this, 100)
                 } else {
                     // 倒计时结束
-                    hideWaitToast()
+                    waitOverlayManager.hideWaitOverlay()
                     Log.d(TAG, "等待计时结束，等待1秒进入状态4")
 
                     // 等待1秒后进入反馈状态
@@ -220,11 +222,12 @@ class DecisionStateMachine(
     private fun enterEndState() {
         currentState = State.END
         isRunning = false
+        // 确保隐藏等待悬浮窗
+        waitOverlayManager.hideWaitOverlay()
         Log.d(TAG, "进入结束状态（状态5），解除录音冷冻并结束状态机")
 
         // 清理资源
         handler.removeCallbacksAndMessages(null)
-        hideWaitToast()
         circleOverlayFeature.hideCircleOverlay()
 
         // 回调：解除录音冷冻
@@ -235,40 +238,7 @@ class DecisionStateMachine(
     }
 
     /**
-     * 更新等待状态的动态提示框
-     */
-    private fun updateWaitToast(remainingSeconds: Double) {
-        // 必须在主线程执行
-        mainHandler.post {
-            // 取消之前的Toast
-            waitToast?.cancel()
-
-            // 创建自定义Toast
-            val toastView = LayoutInflater.from(activity).inflate(R.layout.toast_wait, null)
-            val tvCountdown = toastView.findViewById<TextView>(R.id.tv_countdown)
-            tvCountdown.text = String.format("请等待：%.1f秒", remainingSeconds)
-
-            waitToast = Toast(activity).apply {
-                duration = Toast.LENGTH_LONG
-                view = toastView
-                setGravity(Gravity.CENTER, 0, 0)
-                show()
-            }
-        }
-    }
-
-    /**
-     * 隐藏等待提示框
-     */
-    private fun hideWaitToast() {
-        mainHandler.post {
-            waitToast?.cancel()
-            waitToast = null
-        }
-    }
-
-    /**
-     * 修复：安全显示Toast
+     * 安全显示Toast
      */
     private fun showToast(message: String) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -287,7 +257,7 @@ class DecisionStateMachine(
         isRunning = false
         currentState = State.IDLE
         handler.removeCallbacksAndMessages(null)
-        hideWaitToast()
+        waitOverlayManager.hideWaitOverlay() // 隐藏等待悬浮窗
         circleOverlayFeature.hideCircleOverlay()
         Log.d(TAG, "状态机已手动停止")
     }
