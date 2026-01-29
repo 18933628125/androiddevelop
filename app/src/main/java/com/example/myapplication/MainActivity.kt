@@ -16,7 +16,9 @@ import com.example.myapplication.features.AudioRecordFeature
 import com.example.myapplication.features.CircleOverlayFeature
 import com.example.myapplication.features.OverlayFeature
 import com.example.myapplication.features.ScreenshotFeature
+import com.example.myapplication.permission.AssistsPermissionHelper
 import com.example.myapplication.permission.AudioPermissionHelper
+import com.example.myapplication.permission.OverlayPermissionHelper
 import com.example.myapplication.permission.ScreenshotPermissionHelper
 import com.example.myapplication.state.DecisionStateMachine
 import com.example.myapplication.utils.HttpUtils
@@ -36,7 +38,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
+        checkAllPermissionsOnAppStart()
         // 初始化功能类
         screenshotFeature = ScreenshotFeature(this)
         circleOverlayFeature = CircleOverlayFeature(this, lifecycleScope)
@@ -83,7 +85,33 @@ class MainActivity : AppCompatActivity() {
         // 检查权限
         checkPermissions()
     }
+    /**
+     * 核心新增：App启动时检查所有必要权限
+     */
+    private fun checkAllPermissionsOnAppStart() {
+        // 1. 检查录音权限
+        if (!AudioPermissionHelper.hasPermission(this)) {
+            AudioPermissionHelper.requestPermission(this)
+            showToast("请授予录音权限以使用核心功能")
+        }
 
+        // 2. 检查悬浮窗权限（你的OverlayPermissionHelper）
+        if (!OverlayPermissionHelper.hasPermission(this)) {
+            showToast("请授予悬浮窗权限，否则无法显示绿色点击区域")
+            OverlayPermissionHelper.requestPermission(this)
+        }
+
+        // 3. 检查辅助功能权限（你的AssistsPermissionHelper）
+        if (!AssistsPermissionHelper.isAssistsEnabled(this)) {
+            showToast("请开启辅助功能权限，否则无法完成模拟点击")
+            // 延迟1秒打开设置（避免弹窗堆叠）
+            mainHandler.postDelayed({
+                AssistsPermissionHelper.openAssistsSettings(this)
+            }, 1000)
+        }
+
+
+    }
     /**
      * 解析初始请求的响应结果
      */
