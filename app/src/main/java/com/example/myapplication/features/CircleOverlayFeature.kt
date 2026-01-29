@@ -112,7 +112,7 @@ class CircleOverlayFeature(
                     postDelayed({
                         performAssistsClick()
                         onClick()
-                    }, 30)
+                    }, 1000)
                     return true
                 }
                 return true
