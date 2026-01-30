@@ -15,8 +15,8 @@ import java.util.concurrent.TimeUnit
 
 object HttpUtils {
     private const val TAG = "HttpUtils"
-    private const val BASE_URL = "http://10.195.137.85:5000"
-//    private const val BASE_URL = "https://bac5ac86e5d8.ngrok-free.app"
+//    private const val BASE_URL = "http://10.195.137.85:5000"
+    private const val BASE_URL = "https://bac5ac86e5d8.ngrok-free.app"
     // 修复：配置更稳定的OkHttp客户端
     private val client by lazy {
         OkHttpClient.Builder()

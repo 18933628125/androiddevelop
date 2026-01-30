@@ -24,13 +24,16 @@ class CircleOverlayFeature(
 ) {
     private val TAG = "CircleOverlayFeature"
     private var windowManager: WindowManager? = null
-    private var circleView: View? = null
+    private var maskView: View? = null // 改为全屏蒙版视图
     private var layoutParams: WindowManager.LayoutParams? = null
 
     // 最终使用的【物理屏幕绝对坐标】，左上角(0,0)
     private var absoluteClickX = 0f
     private var absoluteClickY = 0f
     private var circleRadius = 0
+    // 屏幕尺寸
+    private var screenWidth = 0
+    private var screenHeight = 0
 
     private var isShowing = false
 
@@ -38,8 +41,7 @@ class CircleOverlayFeature(
      * 外部调用不变，仍然传入千分比 x, y, radiu
      * x: 0~1000 ‰ 屏幕宽度
      * y: 0~1000 ‰ 屏幕高度
-     * 内部全部转换为【物理屏幕绝对坐标】，不受状态栏影响
-     * 核心修改：半径参数乘以2倍显示
+     * 核心修改：全屏红色蒙版 + 绿色可点击圆
      */
     fun showCircleOverlay(
         x: Int,
@@ -59,72 +61,115 @@ class CircleOverlayFeature(
             return
         }
 
-        // 1. 计算【物理屏幕真实宽高】（不再获取状态栏高度）
+        // 1. 获取物理屏幕真实宽高
         val realScreenSize = getRealScreenSize()
-        val screenWidth = realScreenSize.first
-        val screenHeight = realScreenSize.second
+        screenWidth = realScreenSize.first
+        screenHeight = realScreenSize.second
 
         Log.d(TAG, "物理屏幕真实宽高: ${screenWidth}x$screenHeight")
 
         // 2. 千分比 → 物理屏幕绝对坐标（0,0 = 屏幕最左上角）
         val percentX = x / 1000f
         val percentY = y / 1000f
-        val rawX = screenWidth * percentX
-        val rawY = screenHeight * percentY
+        absoluteClickX = screenWidth * percentX
+        absoluteClickY = screenHeight * percentY
 
-        Log.d(TAG, "千分比转换后原始坐标: ($rawX, $rawY)")
-
-        // 3. 不再减去状态栏高度！直接使用原始物理坐标
-        absoluteClickX = rawX
-        absoluteClickY = rawY
-        // 核心修改：将传入的半径乘以2倍
+        // 3. 半径放大2倍
         circleRadius = r * 2
         Log.d(TAG, "原始半径：$r，放大2倍后：$circleRadius")
-
-        val overlayX = rawX.toInt()
-        val overlayY = rawY.toInt()
-
-        Log.d(TAG, "最终物理点击坐标(AssistsCore使用): ($absoluteClickX, $absoluteClickY)")
-        Log.d(TAG, "悬浮窗实际布局坐标: ($overlayX, $overlayY)")
-        Log.d(TAG, "圆形浮窗显示半径: $circleRadius")
+        Log.d(TAG, "可点击区域坐标: ($absoluteClickX, $absoluteClickY)，半径: $circleRadius")
 
         // 先隐藏旧视图
         hideCircleOverlay()
 
         windowManager = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
-        // 4. 自定义绘制绿色实心圆
-        circleView = object : View(activity) {
-            private val circlePaint = Paint().apply {
+        // 4. 创建全屏蒙版视图（红色背景 + 绿色可点击圆）
+        maskView = object : View(activity) {
+            // 红色蒙版画笔（半透明）
+            private val redMaskPaint = Paint().apply {
+                isAntiAlias = true
+                color = Color.RED
+                alpha = 128 // 半透明（0-255）
+                style = Paint.Style.FILL
+            }
+            // 绿色可点击圆画笔
+            private val greenCirclePaint = Paint().apply {
                 isAntiAlias = true
                 color = Color.GREEN
                 alpha = 160
                 style = Paint.Style.FILL
             }
+            // 路径裁剪：用于绘制除绿色圆外的红色蒙版
+            private val clipPath = Path()
+
+            override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+                super.onSizeChanged(w, h, oldw, oldh)
+                // 初始化裁剪路径：整个屏幕区域减去绿色圆区域
+                clipPath.reset()
+                // 添加整个屏幕区域
+                clipPath.addRect(0f, 0f, w.toFloat(), h.toFloat(), Path.Direction.CW)
+                // 减去绿色圆区域（反向）
+                clipPath.addCircle(
+                    absoluteClickX,
+                    absoluteClickY,
+                    circleRadius.toFloat(),
+                    Path.Direction.CW
+                )
+                clipPath.fillType = Path.FillType.EVEN_ODD
+            }
 
             override fun onDraw(canvas: Canvas) {
                 super.onDraw(canvas)
-                val cx = width / 2f
-                val cy = height / 2f
-                // 使用放大后的半径绘制圆形
-                canvas.drawCircle(cx, cy, circleRadius.toFloat(), circlePaint)
+
+                // 第一步：绘制全屏红色蒙版（除了绿色圆区域）
+                canvas.save()
+                canvas.clipPath(clipPath)
+                canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), redMaskPaint)
+                canvas.restore()
+
+                // 第二步：绘制绿色可点击圆
+                canvas.drawCircle(
+                    absoluteClickX,
+                    absoluteClickY,
+                    circleRadius.toFloat(),
+                    greenCirclePaint
+                )
             }
 
             override fun onTouchEvent(event: MotionEvent): Boolean {
                 if (event.action == MotionEvent.ACTION_UP) {
-                    hideCircleOverlay()
-                    // 延迟执行，保证圆先消失再点击
-                    postDelayed({
-                        performAssistsClick()
-                        onClick()
-                    }, 500)
+                    val touchX = event.rawX
+                    val touchY = event.rawY
+
+                    // 计算点击位置到圆心的距离
+                    val distance = Math.sqrt(
+                        Math.pow((touchX - absoluteClickX).toDouble(), 2.0) +
+                                Math.pow((touchY - absoluteClickY).toDouble(), 2.0)
+                    )
+
+                    // 判断是否点击在绿色圆范围内
+                    if (distance <= circleRadius) {
+                        Log.d(TAG, "点击在绿色圆范围内，触发响应")
+                        hideCircleOverlay()
+                        // 延迟执行，保证蒙版先消失再点击
+                        postDelayed({
+                            performAssistsClick()
+                            onClick()
+                        }, 500)
+                    } else {
+                        Log.d(TAG, "点击在红色蒙版区域，忽略响应")
+                        // 可选：给用户提示
+                        // Toast.makeText(activity, "请点击绿色圆圈区域", Toast.LENGTH_SHORT).show()
+                    }
                     return true
                 }
+                // 拦截所有触摸事件，防止透传到下层界面
                 return true
             }
         }
 
-        // 5. 关键 Window 参数，强制全屏、无视系统栏
+        // 5. 配置全屏Window参数
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
@@ -138,32 +183,31 @@ class CircleOverlayFeature(
                 .or(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
                 .or(WindowManager.LayoutParams.FLAG_FULLSCREEN)
                 .or(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+                .or(WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN)
 
         layoutParams = WindowManager.LayoutParams(
-            // 宽度和高度也需要对应放大2倍
-            circleRadius * 2,
-            circleRadius * 2,
+            WindowManager.LayoutParams.MATCH_PARENT, // 全屏宽度
+            WindowManager.LayoutParams.MATCH_PARENT, // 全屏高度
             type,
             flags,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.LEFT
-            // 直接使用原始物理坐标，不再减半径外的任何值
-            this.x = overlayX - circleRadius
-            this.y = overlayY - circleRadius
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
         }
 
-        // 6. 添加到窗口
+        // 6. 添加全屏蒙版到WindowManager
         try {
-            windowManager?.addView(circleView, layoutParams)
-            isShowing = true
-            Log.d(TAG, "绿色实心圆已显示（物理屏幕坐标系），半径放大2倍")
+            maskView?.let {
+                windowManager?.addView(it, layoutParams)
+                isShowing = true
+                Log.d(TAG, "全屏红色蒙版+绿色可点击圆已显示")
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "添加悬浮窗失败", e)
+            Log.e(TAG, "添加全屏蒙版失败", e)
             Toast.makeText(activity, "显示点击区域失败", Toast.LENGTH_SHORT).show()
         }
     }
@@ -209,14 +253,14 @@ class CircleOverlayFeature(
     }
 
     fun hideCircleOverlay() {
-        circleView?.let {
+        maskView?.let {
             try {
                 windowManager?.removeView(it)
             } catch (e: Exception) {
-                Log.e(TAG, "移除悬浮窗失败", e)
+                Log.e(TAG, "移除全屏蒙版失败", e)
             }
         }
-        circleView = null
+        maskView = null
         layoutParams = null
         isShowing = false
     }
