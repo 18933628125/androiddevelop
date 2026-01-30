@@ -33,8 +33,16 @@ object ScreenshotPermissionHelper {
                 mediaProjectionResultData = data
                 Log.d(TAG, "屏幕捕获权限获取成功")
             } else {
+                mediaProjectionResultData = null
                 Log.w(TAG, "用户拒绝了屏幕捕获权限")
             }
         }
+    }
+
+    /**
+     * 检查是否有有效的截图权限
+     */
+    fun hasScreenshotPermission(): Boolean {
+        return mediaProjectionResultData != null
     }
 }

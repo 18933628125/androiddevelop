@@ -34,6 +34,9 @@ class MainActivity : AppCompatActivity() {
     private var currentThreadId: String = ""
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    // 新增：定义截图权限请求码
+    private val REQUEST_CODE_SCREEN_CAPTURE = ScreenshotPermissionHelper.REQUEST_CODE_SCREEN_CAPTURE
+
     @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,11 +85,10 @@ class MainActivity : AppCompatActivity() {
             showToast("圆形悬浮窗已显示，点击后模拟点击($targetX,$targetY)")
         }
 
-        // 检查权限
-        checkPermissions()
+
     }
     /**
-     * 核心新增：App启动时检查所有必要权限
+     * 核心新增：App启动时检查所有必要权限（已添加截图权限检查）
      */
     private fun checkAllPermissionsOnAppStart() {
         // 1. 检查录音权限
@@ -110,8 +112,31 @@ class MainActivity : AppCompatActivity() {
             }, 1000)
         }
 
+        // 4. 检查是否可以绘制悬浮窗（冗余检查，保留）
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            val intent = Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+            startActivity(intent)
+        }
 
+        // 5. 新增：检查并请求截图权限（MediaProjection）
+        checkAndRequestScreenshotPermission()
     }
+
+    /**
+     * 新增：检查并请求截图权限
+     */
+    private fun checkAndRequestScreenshotPermission() {
+        // 截图权限无法直接检查，需要主动请求（因为MediaProjection权限是一次性的）
+        // 这里判断如果还没有获取到权限数据，就请求权限
+        if (ScreenshotPermissionHelper.mediaProjectionResultData == null) {
+            showToast("请授予截图权限，否则录音停止后无法截取屏幕内容")
+            // 延迟1.5秒请求，避免和其他权限请求弹窗堆叠
+            mainHandler.postDelayed({
+                ScreenshotPermissionHelper.requestScreenCapturePermission(this)
+            }, 1500)
+        }
+    }
+
     /**
      * 解析初始请求的响应结果
      */
@@ -173,19 +198,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 检查权限
-     */
-    private fun checkPermissions() {
-        if (!AudioPermissionHelper.hasPermission(this)) {
-            AudioPermissionHelper.requestPermission(this)
-        }
-
-        if (!android.provider.Settings.canDrawOverlays(this)) {
-            val intent = Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
-            startActivity(intent)
-        }
-    }
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -203,9 +215,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 完善：处理截图权限的ActivityResult回调
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        ScreenshotPermissionHelper.onActivityResult(requestCode, resultCode, data)
+
+        // 处理截图权限回调
+        if (requestCode == REQUEST_CODE_SCREEN_CAPTURE) {
+            ScreenshotPermissionHelper.onActivityResult(requestCode, resultCode, data)
+            // 给用户反馈
+            if (resultCode == RESULT_OK && data != null) {
+                showToast("截图权限已授予")
+                Log.d("MainActivity", "截图权限获取成功")
+            } else {
+                showToast("截图权限被拒绝，部分功能将无法使用")
+                Log.w("MainActivity", "用户拒绝了截图权限")
+            }
+        } else {
+            // 其他ActivityResult处理
+            ScreenshotPermissionHelper.onActivityResult(requestCode, resultCode, data)
+        }
     }
 
     override fun onDestroy() {

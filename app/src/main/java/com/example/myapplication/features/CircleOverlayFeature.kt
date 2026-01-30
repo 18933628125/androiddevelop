@@ -39,6 +39,7 @@ class CircleOverlayFeature(
      * x: 0~1000 ‰ 屏幕宽度
      * y: 0~1000 ‰ 屏幕高度
      * 内部全部转换为【物理屏幕绝对坐标】，不受状态栏影响
+     * 核心修改：半径参数乘以2倍显示
      */
     fun showCircleOverlay(
         x: Int,
@@ -76,13 +77,16 @@ class CircleOverlayFeature(
         // 3. 不再减去状态栏高度！直接使用原始物理坐标
         absoluteClickX = rawX
         absoluteClickY = rawY
-        circleRadius = r
+        // 核心修改：将传入的半径乘以2倍
+        circleRadius = r * 2
+        Log.d(TAG, "原始半径：$r，放大2倍后：$circleRadius")
 
         val overlayX = rawX.toInt()
         val overlayY = rawY.toInt()
 
         Log.d(TAG, "最终物理点击坐标(AssistsCore使用): ($absoluteClickX, $absoluteClickY)")
         Log.d(TAG, "悬浮窗实际布局坐标: ($overlayX, $overlayY)")
+        Log.d(TAG, "圆形浮窗显示半径: $circleRadius")
 
         // 先隐藏旧视图
         hideCircleOverlay()
@@ -102,6 +106,7 @@ class CircleOverlayFeature(
                 super.onDraw(canvas)
                 val cx = width / 2f
                 val cy = height / 2f
+                // 使用放大后的半径绘制圆形
                 canvas.drawCircle(cx, cy, circleRadius.toFloat(), circlePaint)
             }
 
@@ -112,7 +117,7 @@ class CircleOverlayFeature(
                     postDelayed({
                         performAssistsClick()
                         onClick()
-                    }, 1000)
+                    }, 500)
                     return true
                 }
                 return true
@@ -135,6 +140,7 @@ class CircleOverlayFeature(
                 .or(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
 
         layoutParams = WindowManager.LayoutParams(
+            // 宽度和高度也需要对应放大2倍
             circleRadius * 2,
             circleRadius * 2,
             type,
@@ -155,7 +161,7 @@ class CircleOverlayFeature(
         try {
             windowManager?.addView(circleView, layoutParams)
             isShowing = true
-            Log.d(TAG, "绿色实心圆已显示（物理屏幕坐标系）")
+            Log.d(TAG, "绿色实心圆已显示（物理屏幕坐标系），半径放大2倍")
         } catch (e: Exception) {
             Log.e(TAG, "添加悬浮窗失败", e)
             Toast.makeText(activity, "显示点击区域失败", Toast.LENGTH_SHORT).show()
