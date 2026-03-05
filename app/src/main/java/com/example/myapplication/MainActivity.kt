@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
         // 初始化功能类
         screenshotFeature = ScreenshotFeature(this)
         circleOverlayFeature = CircleOverlayFeature(this, lifecycleScope)
+
         audioRecordFeature = AudioRecordFeature(this) { audioFile, screenshotFile, threadId ->
             currentThreadId = threadId
             Log.d("MainActivity", "录音+截图完成，开始发送初始请求")
@@ -70,21 +71,9 @@ class MainActivity : AppCompatActivity() {
                 }
             )},2000)
         }
-
         // 初始化悬浮窗（包含录音图标）
         overlayFeature = OverlayFeature(this, audioRecordFeature)
         overlayFeature.show()
-
-        // 显示圆形悬浮窗按钮
-        val btnShowCircle = findViewById<Button>(R.id.btnShowCircleOverlay)
-        btnShowCircle.setOnClickListener {
-            val targetX = 370
-            val targetY = 1740
-            val radius = 100
-            circleOverlayFeature.showCircleOverlay(x = targetX, y = targetY, r = radius)
-            showToast("圆形悬浮窗已显示，点击后模拟点击($targetX,$targetY)")
-        }
-
 
     }
     /**
@@ -106,10 +95,8 @@ class MainActivity : AppCompatActivity() {
         // 3. 检查辅助功能权限（你的AssistsPermissionHelper）
         if (!AssistsPermissionHelper.isAssistsEnabled(this)) {
             showToast("请开启辅助功能权限，否则无法完成模拟点击")
-            // 延迟1秒打开设置（避免弹窗堆叠）
-            mainHandler.postDelayed({
-                AssistsPermissionHelper.openAssistsSettings(this)
-            }, 1000)
+            AssistsPermissionHelper.openAssistsSettings(this)
+
         }
 
         // 4. 检查是否可以绘制悬浮窗（冗余检查，保留）
