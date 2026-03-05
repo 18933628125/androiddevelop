@@ -239,25 +239,5 @@ object HttpUtils {
         }.start()
     }
 
-    // 测试网络连接
-    fun testNetworkConnection(callback: (Boolean, String?) -> Unit) {
-        Thread {
-            try {
-                val request = Request.Builder()
-                    .url("$BASE_URL/health")
-                    .get()
-                    .build()
 
-                val response = client.newCall(request).execute()
-                mainHandler.post {
-                    callback(response.isSuccessful, "状态码：${response.code}")
-                }
-                response.close()
-            } catch (e: Exception) {
-                mainHandler.post {
-                    callback(false, e.message)
-                }
-            }
-        }.start()
-    }
 }

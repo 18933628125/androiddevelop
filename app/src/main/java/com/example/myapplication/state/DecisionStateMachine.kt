@@ -46,22 +46,63 @@ class DecisionStateMachine(
     }
 
     /**
+     * 解析初始请求的响应结果
+     */
+    private fun parseInitResponse(response: String): Pair<String, Map<String, Any>> {
+        try {
+            // 简单JSON解析
+            val cleanResponse = response.replace("{", "").replace("}", "").replace("\"", "")
+            val keyValuePairs = cleanResponse.split(",").associate {
+                val parts = it.split(":")
+                parts[0].trim() to parts[1].trim()
+            }
+
+            val actionType = keyValuePairs["action_type"] ?: "end"
+            val data = mutableMapOf<String, Any>()
+
+            when (actionType) {
+                "click" -> {
+                    data["x"] = keyValuePairs["x"]?.toDouble() ?: 0.0
+                    data["y"] = keyValuePairs["y"]?.toDouble() ?: 0.0
+                    data["radiu"] = keyValuePairs["radiu"]?.toDouble() ?: 0.0
+                }
+                "wait" -> {
+                    data["seconds"] = keyValuePairs["seconds"]?.toDouble() ?: 0.0
+                }
+                "WECHAT_VIDEO_CALL" -> {
+                    data["contact_name"] = keyValuePairs["contact_name"] ?: ""
+                }
+            }
+            return Pair(actionType, data)
+        } catch (e: Exception) {
+            Log.e(TAG, "解析初始响应失败：${e.message}", e)
+            return Pair("end", emptyMap())
+        }
+    }
+
+    /**
      * 启动状态机（初始状态1）
      */
-    fun start(initialAction: String, data: Map<String, Any>) {
+    fun start(response: String) {
         if (isRunning) return
         isRunning = true
-        Log.d(TAG, "状态机启动，初始指令：$initialAction，thread_id：$threadId")
-        handleAction(initialAction, data)
+        val (actionType, data) = parseInitResponse(response)
+        Log.d(TAG, "状态机启动，初始指令：$actionType，thread_id：$threadId")
+        handleAction(actionType, data)
     }
 
     /**
      * 处理后端返回的动作指令
      */
     private fun handleAction(actionType: String, data: Map<String, Any>) {
-        when (actionType.lowercase()) {
+        when (actionType) {
             "click" -> enterClickState(data)
             "wait" -> enterWaitState(data)
+            "WECHAT_VIDEO_CALL" -> {
+                val contactName = data["contact_name"] as? String ?: ""
+                Log.d(TAG, "contact_name: $contactName")
+                enterEndState()
+            }
             "end" -> enterEndState()
             else -> {
                 Log.e(TAG, "未知指令：$actionType")

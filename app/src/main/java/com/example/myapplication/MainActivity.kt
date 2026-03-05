@@ -61,7 +61,18 @@ class MainActivity : AppCompatActivity() {
                 callback = { isSuccess, response, errorMsg ->
                     if (isSuccess && response != null) {
                         // 解析初始响应
-                        parseInitResponse(response, threadId)
+                        decisionStateMachine = DecisionStateMachine(
+                            activity = this,
+                            circleOverlayFeature = circleOverlayFeature,
+                            screenshotFeature = screenshotFeature,
+                            threadId = threadId,
+                            onStateMachineEnd = {
+                                // 状态机结束回调：解冻录音（恢复图标）
+                                overlayFeature.unfreezeRecord()
+                                showToast("状态机结束，可重新录音")
+                            }
+                        )
+                        decisionStateMachine?.start(response)
                     } else {
                         Log.e("MainActivity", "初始请求失败：$errorMsg")
                         showToast("初始请求失败：$errorMsg")
@@ -106,15 +117,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 5. 新增：检查并请求截图权限（MediaProjection）
-        checkAndRequestScreenshotPermission()
-    }
-
-    /**
-     * 新增：检查并请求截图权限
-     */
-    private fun checkAndRequestScreenshotPermission() {
-        // 截图权限无法直接检查，需要主动请求（因为MediaProjection权限是一次性的）
-        // 这里判断如果还没有获取到权限数据，就请求权限
         if (ScreenshotPermissionHelper.mediaProjectionResultData == null) {
             showToast("请授予截图权限，否则录音停止后无法截取屏幕内容")
             // 延迟1.5秒请求，避免和其他权限请求弹窗堆叠
@@ -124,56 +126,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 解析初始请求的响应结果
-     */
-    private fun parseInitResponse(response: String, threadId: String) {
-        try {
-            // 简单JSON解析
-            val cleanResponse = response.replace("{", "").replace("}", "").replace("\"", "")
-            val keyValuePairs = cleanResponse.split(",").associate {
-                val parts = it.split(":")
-                parts[0].trim() to parts[1].trim()
-            }
 
-            val actionType = keyValuePairs["action_type"] ?: "end"
-            val data = mutableMapOf<String, Any>()
-
-            when (actionType) {
-                "click" -> {
-                    data["x"] = keyValuePairs["x"]?.toDouble() ?: 0.0
-                    data["y"] = keyValuePairs["y"]?.toDouble() ?: 0.0
-                    data["radiu"] = keyValuePairs["radiu"]?.toDouble() ?: 0.0
-                }
-                "wait" -> {
-                    data["seconds"] = keyValuePairs["seconds"]?.toDouble() ?: 0.0
-                }
-                "WECHAT_VIDEO_CALL" -> {
-                    data["contact_name"] = keyValuePairs["contact_name"] ?: ""
-                }
-            }
-
-            // 创建并启动状态机
-            decisionStateMachine = DecisionStateMachine(
-                activity = this,
-                circleOverlayFeature = circleOverlayFeature,
-                screenshotFeature = screenshotFeature,
-                threadId = threadId,
-                onStateMachineEnd = {
-                    // 状态机结束回调：解冻录音（恢复图标）
-                    overlayFeature.unfreezeRecord()
-                    showToast("状态机结束，可重新录音")
-                }
-            )
-            decisionStateMachine?.start(actionType, data)
-
-        } catch (e: Exception) {
-            Log.e("MainActivity", "解析初始响应失败：${e.message}", e)
-            showToast("解析响应失败：${e.message}")
-            // 解冻录音
-            overlayFeature.unfreezeRecord()
-        }
-    }
 
     /**
      * 安全显示Toast
