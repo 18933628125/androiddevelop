@@ -15,8 +15,8 @@ import java.util.concurrent.TimeUnit
 
 object HttpUtils {
     private const val TAG = "HttpUtils"
-//    private const val BASE_URL = "http://10.195.137.85:5000"
-    private const val BASE_URL = "https://bac5ac86e5d8.ngrok-free.app"
+    private const val BASE_URL = "http://10.196.95.9:5000"
+//    private const val BASE_URL = "https://bac5ac86e5d8.ngrok-free.app"
     // 修复：配置更稳定的OkHttp客户端
     private val client by lazy {
         OkHttpClient.Builder()
@@ -32,6 +32,15 @@ object HttpUtils {
 
     // 主线程Handler，用于切换线程显示Toast
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // 添加Unicode解码函数，修复日志中中文显示问题
+    private fun unescapeUnicode(text: String): String {
+        return text.replace(Regex("\\\\u([0-9a-fA-F]{4})")) { matchResult ->
+            val hexCode = matchResult.groupValues[1]
+            val code = hexCode.toInt(16)
+            code.toChar().toString()
+        }
+    }
 
     // 初始决策接口（修复版本）
     fun sendInitDecision(
@@ -116,8 +125,9 @@ object HttpUtils {
                 try {
                     val response = client.newCall(request).execute()
                     if (response.isSuccessful) {
-                        val responseBody = response.body?.string() ?: ""
-                        Log.d(TAG, "初始请求成功，返回：\n$responseBody")
+                        var responseBody = response.body?.string() ?: ""
+                        responseBody=unescapeUnicode(responseBody)
+                        Log.d(TAG, "初始请求成功，返回：\n${responseBody}")
                         // 切换到主线程回调
                         mainHandler.post {
                             callback(true, responseBody, null)
@@ -200,8 +210,9 @@ object HttpUtils {
                 try {
                     val response = client.newCall(request).execute()
                     if (response.isSuccessful) {
-                        val responseBody = response.body?.string() ?: ""
-                        Log.d(TAG, "反馈请求成功，返回：\n$responseBody")
+                        var responseBody = response.body?.string() ?: ""
+                        responseBody=unescapeUnicode(responseBody)
+                        Log.d(TAG, "反馈请求成功，返回：\n${responseBody}")
                         mainHandler.post {
                             callback(true, responseBody, null)
                         }

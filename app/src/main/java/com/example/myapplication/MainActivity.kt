@@ -148,6 +148,9 @@ class MainActivity : AppCompatActivity() {
                 "wait" -> {
                     data["seconds"] = keyValuePairs["seconds"]?.toDouble() ?: 0.0
                 }
+                "WECHAT_VIDEO_CALL" -> {
+                    data["contact_name"] = keyValuePairs["contact_name"] ?: ""
+                }
             }
 
             // 创建并启动状态机
