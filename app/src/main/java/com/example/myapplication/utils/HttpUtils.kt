@@ -9,13 +9,16 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
 import java.util.concurrent.TimeUnit
 
 object HttpUtils {
     private const val TAG = "HttpUtils"
-    private const val BASE_URL = "http://10.196.95.9:5000"
+    private const val BASE_URL = "http://10.195.133.255:5000"
 //    private const val BASE_URL = "https://bac5ac86e5d8.ngrok-free.app"
     // 修复：配置更稳定的OkHttp客户端
     private val client by lazy {
@@ -239,5 +242,66 @@ object HttpUtils {
         }.start()
     }
 
+    // 提交微信联系人信息接口
+    fun submitWechatContacts(
+        contacts: List<Pair<String, String>>,
+        callback: (Boolean, String?, String?) -> Unit
+    ) {
+        Thread {
+            try {
+                // 构建JSON数组
+                val jsonArray = JSONArray()
+                contacts.forEach { (nickname, realname) ->
+                    val contactObj = JSONObject().apply {
+                        put("nickname", nickname)
+                        put("realname", realname)
+                    }
+                    jsonArray.put(contactObj)
+                }
+
+                val jsonBody = jsonArray.toString()
+                val requestBody = jsonBody.toRequestBody("application/json".toMediaType())
+
+                // 构建请求
+                val request = Request.Builder()
+                    .url("$BASE_URL/decision/getusername")
+                    .post(requestBody)
+                    .header("Content-Type", "application/json")
+                    .build()
+
+                Log.d(TAG, "发送联系人信息到：$BASE_URL/decision/getusername，数据：$jsonBody")
+
+                // 执行请求
+                try {
+                    val response = client.newCall(request).execute()
+                    if (response.isSuccessful) {
+                        var responseBody = response.body?.string() ?: ""
+                        responseBody = unescapeUnicode(responseBody)
+                        Log.d(TAG, "提交联系人信息成功，返回：\n${responseBody}")
+                        mainHandler.post {
+                            callback(true, responseBody, null)
+                        }
+                    } else {
+                        val errorMsg = "状态码：${response.code}，信息：${response.message}"
+                        Log.e(TAG, "提交联系人信息失败：$errorMsg")
+                        mainHandler.post {
+                            callback(false, null, errorMsg)
+                        }
+                    }
+                    response.close()
+                } catch (e: Exception) {
+                    Log.e(TAG, "提交联系人信息请求异常：${e.message}", e)
+                    mainHandler.post {
+                        callback(false, null, e.message ?: "网络请求失败")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "构建联系人信息请求失败：${e.message}", e)
+                mainHandler.post {
+                    callback(false, null, e.message ?: "请求构建失败")
+                }
+            }
+        }.start()
+    }
 
 }

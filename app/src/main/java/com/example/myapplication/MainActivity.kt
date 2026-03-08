@@ -16,13 +16,13 @@ import com.example.myapplication.features.AudioRecordFeature
 import com.example.myapplication.features.CircleOverlayFeature
 import com.example.myapplication.features.OverlayFeature
 import com.example.myapplication.features.ScreenshotFeature
+import com.example.myapplication.features.WechatContactsInsert
 import com.example.myapplication.permission.AssistsPermissionHelper
 import com.example.myapplication.permission.AudioPermissionHelper
 import com.example.myapplication.permission.OverlayPermissionHelper
 import com.example.myapplication.permission.ScreenshotPermissionHelper
 import com.example.myapplication.state.DecisionStateMachine
 import com.example.myapplication.utils.HttpUtils
-import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -42,6 +42,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         checkAllPermissionsOnAppStart()
+
+        // 设置录入微信联系人信息按钮点击事件
+        findViewById<Button>(R.id.btnWechatContacts).setOnClickListener {
+            val intent = Intent(this, WechatContactsInsert::class.java)
+            startActivity(intent)
+        }
+
         // 初始化功能类
         screenshotFeature = ScreenshotFeature(this)
         circleOverlayFeature = CircleOverlayFeature(this, lifecycleScope)
