@@ -9,7 +9,11 @@ import com.example.myapplication.R
 import com.example.myapplication.features.CircleOverlayFeature
 import com.example.myapplication.features.ScreenshotFeature
 import com.example.myapplication.features.WaitOverlayManager
+import com.example.myapplication.features.WechatVideoCallFeature
 import com.example.myapplication.utils.HttpUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -101,7 +105,7 @@ class DecisionStateMachine(
             "WECHAT_VIDEO_CALL" -> {
                 val contactName = data["contact_name"] as? String ?: ""
                 Log.d(TAG, "contact_name: $contactName")
-                enterEndState()
+                enterWechatVideoCallState(contactName)
             }
             "end" -> enterEndState()
             else -> {
@@ -254,6 +258,26 @@ class DecisionStateMachine(
             Log.e(TAG, "解析反馈结果失败：${e.message}", e)
             showToast("解析反馈结果失败：${e.message}")
             enterEndState()
+        }
+    }
+
+    /**
+     * 进入微信视频通话状态
+     */
+    private fun enterWechatVideoCallState(contactName: String) {
+        currentState = State.WAIT
+        Log.d(TAG, "进入微信视频通话状态，联系人：$contactName")
+
+        val videoCallFeature = WechatVideoCallFeature(activity)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            videoCallFeature.performWechatVideoCall(contactName) {
+                Log.d(TAG, "微信视频通话流程执行完毕")
+                // 通话流程结束后进入结束状态
+                handler.post {
+                    enterEndState()
+                }
+            }
         }
     }
 
