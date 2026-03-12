@@ -5,10 +5,7 @@ import android.util.Log
 import android.widget.Toast
 import com.example.myapplication.permission.AssistsPermissionHelper
 import com.ven.assists.AssistsCore
-import com.ven.assists.AssistsCore.click
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 
 class WechatVideoCallFeature(private val activity: Activity) {
     private val TAG = "WechatVideoCallFeature"
@@ -23,85 +20,153 @@ class WechatVideoCallFeature(private val activity: Activity) {
             return
         }
 
-        // 1. 打开微信
-        openWechat()
+        try {
+            // 1. 打开微信
+            openWechat()
 
-        // 等待微信启动
-        Log.d(TAG, "等待微信启动...")
-        delay(5000)
+            // 等待微信启动
+            Log.d(TAG, "等待微信启动...")
+            delay(5000)
 
-        // 2. 尝试使用坐标点击搜索按钮（不依赖节点获取）
-        clickSearchButtonByCoordinate()
+            // 2. 点击搜索按钮
+            clickSearchButton()
 
+            // 3. 点击搜索框并输入联系人
+            performSearch(contactName)
+
+            // 4. 点击第一个联系人进入聊天界面
+            clickFirstContact()
+
+            // 5. 点击拓展按钮（+号）
+            clickExpandButton()
+
+            // 6. 点击视频通话按钮
+            clickVideoCallButton()
+
+            // 7. 确认视频通话
+            confirmVideoCall()
+
+            Log.d(TAG, "微信视频通话流程执行完毕")
+        } catch (e: Exception) {
+            Log.e(TAG, "微信视频通话流程异常: ${e.message}", e)
+            showToast("流程执行失败: ${e.message}")
+        } finally {
+            onComplete()
+        }
     }
 
-    private suspend fun clickSearchButtonByCoordinate() {
-        Log.d(TAG, "使用绝对坐标点击搜索按钮")
-
-        // 方式1：使用 gestureClick 点击坐标 (890, 201)
-        Log.d(TAG, "尝试使用 gestureClick(890, 201)")
+    private suspend fun clickSearchButton() {
+        Log.d(TAG, "点击搜索按钮 (890, 201)")
         try {
-            val result1 = AssistsCore.gestureClick(890f, 201f, 200L)
-            Log.d(TAG, "gestureClick(890, 201) 结果: $result1")
-            if (result1) {
-                Log.d(TAG, "点击成功，等待搜索界面加载...")
-                delay(2000)
-                // 继续后续流程...
-                performSearch(contactName = "小曾")
-                return
-            }
+            val result = AssistsCore.gestureClick(890f, 201f, 200L)
+            Log.d(TAG, "点击搜索按钮结果: $result")
+            delay(2000)
         } catch (e: Exception) {
-            Log.e(TAG, "gestureClick 异常: ${e.message}", e)
+            Log.e(TAG, "点击搜索按钮异常: ${e.message}", e)
+            throw e
         }
-
-        // 方式2：如果方式1失败，尝试稍微调整坐标
-        Log.d(TAG, "方式1失败，尝试调整坐标 (885, 200)")
-        try {
-            val result2 = AssistsCore.gestureClick(885f, 200f, 200L)
-            Log.d(TAG, "gestureClick(885, 200) 结果: $result2")
-            if (result2) {
-                Log.d(TAG, "点击成功，等待搜索界面加载...")
-                delay(2000)
-                performSearch(contactName = "小曾")
-                return
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "gestureClick 异常: ${e.message}", e)
-        }
-
-        Log.e(TAG, "所有点击方式均失败")
     }
 
     private suspend fun performSearch(contactName: String) {
         Log.d(TAG, "开始搜索联系人: $contactName")
 
-        // 等待搜索框出现并输入文字
-        delay(1000)
+        try {
+            // 点击搜索输入框位置 (540, 237)
+            Log.d(TAG, "点击搜索输入框位置: (540, 237)")
+            val clickResult = AssistsCore.gestureClick(540f, 237f, 200L)
+            Log.d(TAG, "点击搜索框结果: $clickResult")
+            delay(500)
 
-        // 尝试使用 gestureClick 点击搜索输入框位置 (假设在屏幕中间)
-        val screenWidth = activity.resources.displayMetrics.widthPixels
-        val screenHeight = activity.resources.displayMetrics.heightPixels
-        val searchBoxX = screenWidth / 2f
-        val searchBoxY = screenHeight * 0.15f  // 搜索框通常在屏幕上方
+            // 输入联系人名称
+            Log.d(TAG, "输入联系人: $contactName")
+            inputText(contactName)
 
-        Log.d(TAG, "点击搜索输入框位置: ($searchBoxX, $searchBoxY)")
-        val clickResult = AssistsCore.gestureClick(searchBoxX, searchBoxY, 200L)
-        Log.d(TAG, "点击搜索框结果: $clickResult")
+            delay(1000)
+        } catch (e: Exception) {
+            Log.e(TAG, "搜索联系人异常: ${e.message}", e)
+            throw e
+        }
+    }
 
-        delay(500)
+    private suspend fun inputText(text: String) {
+        Log.d(TAG, "开始输入文字: $text")
 
-        // 输入联系人名称（使用系统输入法）
-        // 注意：AssistsCore 可能没有直接输入文字的方法，需要通过其他方式
-        // 这里先打印日志，后续可以实现输入逻辑
-        Log.d(TAG, "需要输入联系人: $contactName")
+        // 使用 ClipboardManager 复制粘贴
+        try {
+            Log.d(TAG, "使用剪贴板粘贴")
+            val clipboard = activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("contact", text)
+            clipboard.setPrimaryClip(clip)
+            Log.d(TAG, "文字已复制到剪贴板: $text")
 
-        // 由于微信阻止了节点获取，后续流程可能需要完全依赖坐标点击
-        // 或者使用其他方式（如 adb shell input）来输入文字
+            // 长按搜索框 (540, 237) 约5秒调出粘贴菜单
+            Log.d(TAG, "长按搜索框 (540, 237) 5秒调出粘贴菜单")
+            AssistsCore.gestureClick(540f, 237f, 5000L)
+            delay(1000)
+
+            // 点击粘贴按钮 (130, 380)
+            Log.d(TAG, "点击粘贴按钮 (130, 380)")
+            val pasteResult = AssistsCore.gestureClick(130f, 380f, 200L)
+            Log.d(TAG, "点击粘贴按钮结果: $pasteResult")
+            delay(1000)
+
+            Log.d(TAG, "文字粘贴完成")
+        } catch (e: Exception) {
+            Log.e(TAG, "剪贴板粘贴失败: ${e.message}", e)
+        }
+    }
+
+    private suspend fun clickFirstContact() {
+        Log.d(TAG, "点击第一个联系人 (540, 527)")
+        try {
+            val result = AssistsCore.gestureClick(540f, 527f, 200L)
+            Log.d(TAG, "点击第一个联系人结果: $result")
+            delay(2000)
+        } catch (e: Exception) {
+            Log.e(TAG, "点击第一个联系人异常: ${e.message}", e)
+            throw e
+        }
+    }
+
+    private suspend fun clickExpandButton() {
+        Log.d(TAG, "点击拓展按钮 (1018, 2260)")
+        try {
+            val result = AssistsCore.gestureClick(1018f, 2260f, 200L)
+            Log.d(TAG, "点击拓展按钮结果: $result")
+            delay(1500)
+        } catch (e: Exception) {
+            Log.e(TAG, "点击拓展按钮异常: ${e.message}", e)
+            throw e
+        }
+    }
+
+    private suspend fun clickVideoCallButton() {
+        Log.d(TAG, "点击视频通话按钮 (657, 1836)")
+        try {
+            val result = AssistsCore.gestureClick(657f, 1836f, 200L)
+            Log.d(TAG, "点击视频通话按钮结果: $result")
+            delay(1500)
+        } catch (e: Exception) {
+            Log.e(TAG, "点击视频通话按钮异常: ${e.message}", e)
+            throw e
+        }
+    }
+
+    private suspend fun confirmVideoCall() {
+        Log.d(TAG, "确认视频通话 (536, 1943)")
+        try {
+            val result = AssistsCore.gestureClick(536f, 1943f, 200L)
+            Log.d(TAG, "确认视频通话结果: $result")
+            delay(2000)
+            Log.d(TAG, "视频通话已发起")
+        } catch (e: Exception) {
+            Log.e(TAG, "确认视频通话异常: ${e.message}", e)
+            throw e
+        }
     }
 
     private fun openWechat() {
         try {
-            // 直接启动微信的 LauncherUI
             val intent = android.content.Intent().apply {
                 setClassName("com.tencent.mm", "com.tencent.mm.ui.LauncherUI")
                 addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -111,7 +176,6 @@ class WechatVideoCallFeature(private val activity: Activity) {
             Log.d(TAG, "直接启动微信 LauncherUI 成功")
         } catch (e: Exception) {
             Log.e(TAG, "直接启动微信失败：${e.message}")
-            // 如果直接启动失败，尝试使用包名启动
             try {
                 val intent = activity.packageManager.getLaunchIntentForPackage("com.tencent.mm")
                 if (intent != null) {
