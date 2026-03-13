@@ -8,8 +8,6 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.asRequestBody
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -18,8 +16,8 @@ import java.util.concurrent.TimeUnit
 
 object HttpUtils {
     private const val TAG = "HttpUtils"
-    private const val BASE_URL = "http://10.195.129.31:5000"
-//    private const val BASE_URL = "https://bac5ac86e5d8.ngrok-free.app"
+//    private const val BASE_URL = "http://10.195.129.31:5000"
+    private const val BASE_URL = "https://3ece-202-38-247-165.ngrok-free.app"
     // 修复：配置更稳定的OkHttp客户端
     private val client by lazy {
         OkHttpClient.Builder()
@@ -57,6 +55,7 @@ object HttpUtils {
             try {
                 val requestBodyBuilder = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
+                    .addFormDataPart("user_id", "123")
                     .addFormDataPart("thread_id", threadId)
 
                 // 修复：安全处理音频文件
@@ -171,6 +170,7 @@ object HttpUtils {
             try {
                 val requestBodyBuilder = MultipartBody.Builder()
                     .setType(MultipartBody.FORM)
+                    .addFormDataPart("user_id", "123")
                     .addFormDataPart("thread_id", threadId)
 
                 // 安全处理截图文件
@@ -249,37 +249,49 @@ object HttpUtils {
     ) {
         Thread {
             try {
-                // 构建JSON数组
+                // 构建JSON数组，格式: [{"relation":"xxx","nickname":"xxx"}]
                 val jsonArray = JSONArray()
-                contacts.forEach { (nickname, realname) ->
+                contacts.forEach { (nickname, relation) ->
                     val contactObj = JSONObject().apply {
+                        put("relation", relation)
                         put("nickname", nickname)
-                        put("realname", realname)
                     }
                     jsonArray.put(contactObj)
                 }
 
-                val jsonBody = jsonArray.toString()
-                val requestBody = jsonBody.toRequestBody("application/json".toMediaType())
+                val contactsJson = jsonArray.toString()
+                
+                // 构建Form表单请求体
+                val requestBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("user_id", "123")
+                    .addFormDataPart("contacts_json", contactsJson)
+                    .build()
 
                 // 构建请求
                 val request = Request.Builder()
-                    .url("$BASE_URL/decision/getusername")
+                    .url("$BASE_URL/user/save_contacts")
                     .post(requestBody)
-                    .header("Content-Type", "application/json")
                     .build()
 
-                Log.d(TAG, "发送联系人信息到：$BASE_URL/decision/getusername，数据：$jsonBody")
+                Log.d(TAG, "发送联系人信息到：$BASE_URL/user/save_contacts")
+                Log.d(TAG, "user_id: 123")
+                Log.d(TAG, "contacts_json: $contactsJson")
 
                 // 执行请求
                 try {
                     val response = client.newCall(request).execute()
+                    val responseBody = response.body?.string() ?: ""
+                    val decodedResponse = unescapeUnicode(responseBody)
+                    
+                    // 打印后端返回的JSON结果
+                    Log.d(TAG, "后端返回原始JSON: $responseBody")
+                    Log.d(TAG, "后端返回解码后JSON: $decodedResponse")
+                    
                     if (response.isSuccessful) {
-                        var responseBody = response.body?.string() ?: ""
-                        responseBody = unescapeUnicode(responseBody)
-                        Log.d(TAG, "提交联系人信息成功，返回：\n${responseBody}")
+                        Log.d(TAG, "提交联系人信息成功")
                         mainHandler.post {
-                            callback(true, responseBody, null)
+                            callback(true, decodedResponse, null)
                         }
                     } else {
                         val errorMsg = "状态码：${response.code}，信息：${response.message}"

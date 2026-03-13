@@ -64,18 +64,18 @@ class WechatContactsInsert : AppCompatActivity() {
         for (i in 0 until contactsContainer.childCount) {
             val contactView = contactsContainer.getChildAt(i)
             val etNickname = contactView.findViewById<EditText>(R.id.etNickname)
-            val etRealname = contactView.findViewById<EditText>(R.id.etRealname)
+            val etRelation = contactView.findViewById<EditText>(R.id.etRelation)
 
             val nickname = etNickname.text.toString().trim()
-            val realname = etRealname.text.toString().trim()
+            val relation = etRelation.text.toString().trim()
 
             // 只添加有内容的联系人
-            if (nickname.isNotEmpty() || realname.isNotEmpty()) {
-                if (nickname.isEmpty() || realname.isEmpty()) {
+            if (nickname.isNotEmpty() || relation.isNotEmpty()) {
+                if (nickname.isEmpty() || relation.isEmpty()) {
                     showToast("联系人${i + 1}的信息不完整，请填写完整")
                     return
                 }
-                contacts.add(Pair(nickname, realname))
+                contacts.add(Pair(nickname, relation))
             }
         }
 
