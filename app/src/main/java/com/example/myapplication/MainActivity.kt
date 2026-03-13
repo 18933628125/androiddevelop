@@ -16,6 +16,7 @@ import com.example.myapplication.features.AudioRecordFeature
 import com.example.myapplication.features.CircleOverlayFeature
 import com.example.myapplication.features.OverlayFeature
 import com.example.myapplication.features.ScreenshotFeature
+import com.example.myapplication.features.TextToSpeechFeature
 import com.example.myapplication.features.WechatContactsInsert
 import com.example.myapplication.permission.AssistsPermissionHelper
 import com.example.myapplication.permission.AudioPermissionHelper
@@ -30,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var audioRecordFeature: AudioRecordFeature
     private lateinit var circleOverlayFeature: CircleOverlayFeature
     private lateinit var screenshotFeature: ScreenshotFeature
+    private lateinit var textToSpeechFeature: TextToSpeechFeature
     private var decisionStateMachine: DecisionStateMachine? = null
     private var currentThreadId: String = ""
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -47,6 +49,14 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnWechatContacts).setOnClickListener {
             val intent = Intent(this, WechatContactsInsert::class.java)
             startActivity(intent)
+        }
+
+        // 初始化语音播报功能
+        textToSpeechFeature = TextToSpeechFeature(this)
+
+        // 设置语音播报按钮点击事件
+        findViewById<Button>(R.id.btnSpeakText).setOnClickListener {
+            textToSpeechFeature.speak("你好，现在正在播报语音")
         }
 
         // 初始化功能类
@@ -199,5 +209,8 @@ class MainActivity : AppCompatActivity() {
         overlayFeature.hide()
         circleOverlayFeature.release()
         decisionStateMachine?.stop()
+        if (::textToSpeechFeature.isInitialized) {
+            textToSpeechFeature.release()
+        }
     }
 }

@@ -131,8 +131,8 @@ class OverlayFeature(private val activity: Activity, private val audioRecordFeat
             width = WindowManager.LayoutParams.WRAP_CONTENT
             height = WindowManager.LayoutParams.WRAP_CONTENT
             gravity = Gravity.TOP or Gravity.START // 改为TOP+START，方便坐标计算
-            x = 30 // 初始x坐标（右侧30dp）
-            y = activity.resources.displayMetrics.heightPixels - 130 // 初始y坐标（底部100dp）
+            x = activity.resources.displayMetrics.widthPixels - 300 // 初始x坐标（右侧80dp）
+            y = activity.resources.displayMetrics.heightPixels - 400 // 初始y坐标（底部120dp）
 
             type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
