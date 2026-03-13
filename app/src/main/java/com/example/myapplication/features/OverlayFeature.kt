@@ -42,6 +42,12 @@ class OverlayFeature(private val activity: Activity, private val audioRecordFeat
             return
         }
 
+        // 如果悬浮窗已经显示，则不再重复添加
+        if (overlayView != null && windowManager != null) {
+            Log.d(TAG, "悬浮窗已存在，无需重复显示")
+            return
+        }
+
         windowManager = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val inflater = activity.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
         overlayView = inflater.inflate(R.layout.overlay_layout, null)

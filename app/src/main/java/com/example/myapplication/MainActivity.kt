@@ -186,6 +186,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 当用户从权限设置页面返回时，检查权限并显示悬浮窗
+        if (::overlayFeature.isInitialized) {
+            overlayFeature.show()
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         overlayFeature.hide()
