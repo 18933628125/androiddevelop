@@ -16,8 +16,8 @@ import java.util.concurrent.TimeUnit
 
 object HttpUtils {
     private const val TAG = "HttpUtils"
-    private const val BASE_URL = "http://10.195.136.96:5000"
-//    private const val BASE_URL = "https://3ece-202-38-247-165.ngrok-free.app"
+//    private const val BASE_URL = "http://10.195.136.96:5000"
+    private const val BASE_URL = "https://4a4b-202-38-247-165.ngrok-free.app"
     // 修复：配置更稳定的OkHttp客户端
     private val client by lazy {
         OkHttpClient.Builder()
@@ -164,12 +164,10 @@ object HttpUtils {
     fun getContacts(callback: (Boolean, String?, String?) -> Unit) {
         Thread {
             try {
-                val requestBody = RequestBody.create(
-                    "application/json; charset=utf-8".toMediaType(),
-                    JSONObject().apply {
-                        put("user_id", "123")
-                    }.toString()
-                )
+                val requestBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("user_id", "123")
+                    .build()
 
                 val request = Request.Builder()
                     .url("$BASE_URL/user/get_contacts")
@@ -214,13 +212,11 @@ object HttpUtils {
     fun deleteContact(relation: String, callback: (Boolean, String?, String?) -> Unit) {
         Thread {
             try {
-                val requestBody = RequestBody.create(
-                    "application/json; charset=utf-8".toMediaType(),
-                    JSONObject().apply {
-                        put("user_id", "123")
-                        put("relation", relation)
-                    }.toString()
-                )
+                val requestBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("user_id", "123")
+                    .addFormDataPart("relation", relation)
+                    .build()
 
                 val request = Request.Builder()
                     .url("$BASE_URL/user/delete_contact")

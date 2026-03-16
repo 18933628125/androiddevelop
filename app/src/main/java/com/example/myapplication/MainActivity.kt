@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
     private var decisionStateMachine: DecisionStateMachine? = null
     private var currentThreadId: String = ""
     private val mainHandler = Handler(Looper.getMainLooper())
+    private lateinit var rvContacts: RecyclerView
 
     // 新增：定义截图权限请求码
     private val REQUEST_CODE_SCREEN_CAPTURE = ScreenshotPermissionHelper.REQUEST_CODE_SCREEN_CAPTURE
@@ -73,32 +74,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 初始化联系人列表
-        val rvContacts = findViewById<RecyclerView>(R.id.rvContacts)
+        rvContacts = findViewById<RecyclerView>(R.id.rvContacts)
         rvContacts.layoutManager = LinearLayoutManager(this)
-
-        // 获取联系人信息
-        HttpUtils.getContacts { isSuccess, response, errorMsg ->
-            if (isSuccess && response != null) {
-                try {
-                    val jsonObject = JSONObject(response)
-                    val contactsJsonArray = jsonObject.getJSONArray("contacts")
-                    val contacts = mutableListOf<Contact>()
-                    for (i in 0 until contactsJsonArray.length()) {
-                        val contactJson = contactsJsonArray.getJSONObject(i)
-                        val relation = contactJson.getString("relation")
-                        val nickname = contactJson.getString("nickname")
-                        contacts.add(Contact(relation, nickname))
-                    }
-                    rvContacts.adapter = ContactAdapter(contacts)
-                } catch (e: Exception) {
-                    Log.e("MainActivity", "解析联系人失败：${e.message}", e)
-                    showToast("解析联系人失败")
-                }
-            } else {
-                Log.e("MainActivity", "获取联系人失败：$errorMsg")
-                showToast("获取联系人失败：$errorMsg")
-            }
-        }
 
         // 初始化功能类
         screenshotFeature = ScreenshotFeature(this)
@@ -243,6 +220,33 @@ class MainActivity : AppCompatActivity() {
         // 当用户从权限设置页面返回时，检查权限并显示悬浮窗
         if (::overlayFeature.isInitialized) {
             overlayFeature.show()
+        }
+        // 每次进入主界面时获取最新联系人列表
+        fetchContacts()
+    }
+
+    private fun fetchContacts() {
+        HttpUtils.getContacts { isSuccess, response, errorMsg ->
+            if (isSuccess && response != null) {
+                try {
+                    val jsonObject = JSONObject(response)
+                    val contactsJsonArray = jsonObject.getJSONArray("contacts")
+                    val contacts = mutableListOf<Contact>()
+                    for (i in 0 until contactsJsonArray.length()) {
+                        val contactJson = contactsJsonArray.getJSONObject(i)
+                        val relation = contactJson.getString("relation")
+                        val nickname = contactJson.getString("nickname")
+                        contacts.add(Contact(relation, nickname))
+                    }
+                    rvContacts.adapter = ContactAdapter(contacts)
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "解析联系人失败：${e.message}", e)
+                    showToast("解析联系人失败")
+                }
+            } else {
+                Log.e("MainActivity", "获取联系人失败：$errorMsg")
+                showToast("获取联系人失败：$errorMsg")
+            }
         }
     }
 

@@ -32,6 +32,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".features.WechatContactsInsert" android:exported="false" android:label="录入微信联系人信息"/>
+        <activity android:name=".features.WechatContactsDelete" android:exported="false" android:label="删除联系人"/>
         <service
             android:name=".services.ScreenCaptureService"
             android:exported="false"
