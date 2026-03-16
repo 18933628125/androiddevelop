@@ -12,18 +12,25 @@ import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.example.myapplication.adapter.ContactAdapter
 import com.example.myapplication.features.AudioRecordFeature
 import com.example.myapplication.features.CircleOverlayFeature
 import com.example.myapplication.features.OverlayFeature
 import com.example.myapplication.features.ScreenshotFeature
-import com.example.myapplication.features.TextToSpeechFeature
+import com.example.myapplication.features.VoiceBroadcast
 import com.example.myapplication.features.WechatContactsInsert
+import com.example.myapplication.features.WechatContactsDelete
+import com.example.myapplication.model.Contact
 import com.example.myapplication.permission.AssistsPermissionHelper
 import com.example.myapplication.permission.AudioPermissionHelper
 import com.example.myapplication.permission.OverlayPermissionHelper
 import com.example.myapplication.permission.ScreenshotPermissionHelper
 import com.example.myapplication.state.DecisionStateMachine
 import com.example.myapplication.utils.HttpUtils
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,7 +38,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var audioRecordFeature: AudioRecordFeature
     private lateinit var circleOverlayFeature: CircleOverlayFeature
     private lateinit var screenshotFeature: ScreenshotFeature
-    private lateinit var textToSpeechFeature: TextToSpeechFeature
+    private lateinit var voiceBroadcast: VoiceBroadcast
     private var decisionStateMachine: DecisionStateMachine? = null
     private var currentThreadId: String = ""
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -51,12 +58,46 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
+        // 设置删除联系人按钮点击事件
+        findViewById<Button>(R.id.btnDeleteContact).setOnClickListener {
+            val intent = Intent(this, WechatContactsDelete::class.java)
+            startActivity(intent)
+        }
+
         // 初始化语音播报功能
-        textToSpeechFeature = TextToSpeechFeature(this)
+        voiceBroadcast = VoiceBroadcast(this)
 
         // 设置语音播报按钮点击事件
         findViewById<Button>(R.id.btnSpeakText).setOnClickListener {
-            textToSpeechFeature.speak("你好，现在正在播报语音")
+            voiceBroadcast.speak("你好，现在正在播报语音")
+        }
+
+        // 初始化联系人列表
+        val rvContacts = findViewById<RecyclerView>(R.id.rvContacts)
+        rvContacts.layoutManager = LinearLayoutManager(this)
+
+        // 获取联系人信息
+        HttpUtils.getContacts { isSuccess, response, errorMsg ->
+            if (isSuccess && response != null) {
+                try {
+                    val jsonObject = JSONObject(response)
+                    val contactsJsonArray = jsonObject.getJSONArray("contacts")
+                    val contacts = mutableListOf<Contact>()
+                    for (i in 0 until contactsJsonArray.length()) {
+                        val contactJson = contactsJsonArray.getJSONObject(i)
+                        val relation = contactJson.getString("relation")
+                        val nickname = contactJson.getString("nickname")
+                        contacts.add(Contact(relation, nickname))
+                    }
+                    rvContacts.adapter = ContactAdapter(contacts)
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "解析联系人失败：${e.message}", e)
+                    showToast("解析联系人失败")
+                }
+            } else {
+                Log.e("MainActivity", "获取联系人失败：$errorMsg")
+                showToast("获取联系人失败：$errorMsg")
+            }
         }
 
         // 初始化功能类
@@ -83,6 +124,7 @@ class MainActivity : AppCompatActivity() {
                             circleOverlayFeature = circleOverlayFeature,
                             screenshotFeature = screenshotFeature,
                             threadId = threadId,
+                            voiceBroadcast = voiceBroadcast,
                             onStateMachineEnd = {
                                 // 状态机结束回调：解冻录音（恢复图标）
                                 overlayFeature.unfreezeRecord()
@@ -209,8 +251,8 @@ class MainActivity : AppCompatActivity() {
         overlayFeature.hide()
         circleOverlayFeature.release()
         decisionStateMachine?.stop()
-        if (::textToSpeechFeature.isInitialized) {
-            textToSpeechFeature.release()
+        if (::voiceBroadcast.isInitialized) {
+            voiceBroadcast.release()
         }
     }
 }

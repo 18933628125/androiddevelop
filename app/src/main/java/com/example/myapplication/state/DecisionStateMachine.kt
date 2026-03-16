@@ -8,6 +8,7 @@ import android.widget.Toast
 import com.example.myapplication.R
 import com.example.myapplication.features.CircleOverlayFeature
 import com.example.myapplication.features.ScreenshotFeature
+import com.example.myapplication.features.VoiceBroadcast
 import com.example.myapplication.features.WaitOverlayManager
 import com.example.myapplication.features.WechatVideoCallFeature
 import com.example.myapplication.utils.HttpUtils
@@ -24,6 +25,8 @@ class DecisionStateMachine(
     private val circleOverlayFeature: CircleOverlayFeature,
     private val screenshotFeature: ScreenshotFeature,
     private val threadId: String,
+    // 语音播报功能
+    private val voiceBroadcast: VoiceBroadcast,
     // 回调：状态机结束
     private val onStateMachineEnd: () -> Unit
 ) {
@@ -76,6 +79,9 @@ class DecisionStateMachine(
                 "WECHAT_VIDEO_CALL" -> {
                     data["contact_name"] = keyValuePairs["contact_name"] ?: ""
                 }
+                "explanation" -> {
+                    data["details"] = keyValuePairs["details"] ?: ""
+                }
             }
             return Pair(actionType, data)
         } catch (e: Exception) {
@@ -102,6 +108,7 @@ class DecisionStateMachine(
         when (actionType) {
             "click" -> enterClickState(data)
             "wait" -> enterWaitState(data)
+            "explanation" -> handleExplanation(data)
             "WECHAT_VIDEO_CALL" -> {
                 val contactName = data["contact_name"] as? String ?: ""
                 Log.d(TAG, "contact_name: $contactName")
@@ -249,6 +256,9 @@ class DecisionStateMachine(
                 "wait" -> {
                     data["seconds"] = keyValuePairs["seconds"]?.toDouble() ?: 0.0
                 }
+                "explanation" -> {
+                    data["details"] = keyValuePairs["details"] ?: ""
+                }
             }
 
             // 继续处理下一个动作
@@ -259,6 +269,23 @@ class DecisionStateMachine(
             showToast("解析反馈结果失败：${e.message}")
             enterEndState()
         }
+    }
+
+    /**
+     * 处理explanation动作 - 语音播报details内容
+     */
+    private fun handleExplanation(data: Map<String, Any>) {
+        currentState = State.FEEDBACK
+        val details = data["details"] as? String ?: ""
+        Log.d(TAG, "处理explanation动作，播报内容：$details")
+
+        // 进行语音播报
+        voiceBroadcast.speak(details)
+
+        // 播报完成后进入结束状态
+        handler.postDelayed({
+            enterEndState()
+        }, 1000)
     }
 
     /**

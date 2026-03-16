@@ -16,8 +16,8 @@ import java.util.concurrent.TimeUnit
 
 object HttpUtils {
     private const val TAG = "HttpUtils"
-//    private const val BASE_URL = "http://10.195.129.31:5000"
-    private const val BASE_URL = "https://3ece-202-38-247-165.ngrok-free.app"
+    private const val BASE_URL = "http://10.195.136.96:5000"
+//    private const val BASE_URL = "https://3ece-202-38-247-165.ngrok-free.app"
     // 修复：配置更稳定的OkHttp客户端
     private val client by lazy {
         OkHttpClient.Builder()
@@ -153,6 +153,107 @@ object HttpUtils {
             } catch (e: Exception) {
                 Log.e(TAG, "构建请求失败：${e.message}", e)
                 // 切换到主线程回调
+                mainHandler.post {
+                    callback(false, null, e.message ?: "请求构建失败")
+                }
+            }
+        }.start()
+    }
+
+    // 获取联系人接口
+    fun getContacts(callback: (Boolean, String?, String?) -> Unit) {
+        Thread {
+            try {
+                val requestBody = RequestBody.create(
+                    "application/json; charset=utf-8".toMediaType(),
+                    JSONObject().apply {
+                        put("user_id", "123")
+                    }.toString()
+                )
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/user/get_contacts")
+                    .post(requestBody)
+                    .build()
+
+                Log.d(TAG, "发送获取联系人请求到：$BASE_URL/user/get_contacts")
+
+                try {
+                    val response = client.newCall(request).execute()
+                    if (response.isSuccessful) {
+                        var responseBody = response.body?.string() ?: ""
+                        responseBody = unescapeUnicode(responseBody)
+                        Log.d(TAG, "获取联系人成功，返回：\n${responseBody}")
+                        mainHandler.post {
+                            callback(true, responseBody, null)
+                        }
+                    } else {
+                        val errorMsg = "状态码：${response.code}，信息：${response.message}"
+                        Log.e(TAG, "获取联系人失败：$errorMsg")
+                        mainHandler.post {
+                            callback(false, null, errorMsg)
+                        }
+                    }
+                    response.close()
+                } catch (e: Exception) {
+                    Log.e(TAG, "获取联系人异常：${e.message}", e)
+                    mainHandler.post {
+                        callback(false, null, e.message ?: "网络请求失败")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "构建获取联系人请求失败：${e.message}", e)
+                mainHandler.post {
+                    callback(false, null, e.message ?: "请求构建失败")
+                }
+            }
+        }.start()
+    }
+
+    // 删除联系人接口
+    fun deleteContact(relation: String, callback: (Boolean, String?, String?) -> Unit) {
+        Thread {
+            try {
+                val requestBody = RequestBody.create(
+                    "application/json; charset=utf-8".toMediaType(),
+                    JSONObject().apply {
+                        put("user_id", "123")
+                        put("relation", relation)
+                    }.toString()
+                )
+
+                val request = Request.Builder()
+                    .url("$BASE_URL/user/delete_contact")
+                    .post(requestBody)
+                    .build()
+
+                Log.d(TAG, "发送删除联系人请求到：$BASE_URL/user/delete_contact，relation：$relation")
+
+                try {
+                    val response = client.newCall(request).execute()
+                    if (response.isSuccessful) {
+                        var responseBody = response.body?.string() ?: ""
+                        responseBody = unescapeUnicode(responseBody)
+                        Log.d(TAG, "删除联系人成功，返回：\n${responseBody}")
+                        mainHandler.post {
+                            callback(true, responseBody, null)
+                        }
+                    } else {
+                        val errorMsg = "状态码：${response.code}，信息：${response.message}"
+                        Log.e(TAG, "删除联系人失败：$errorMsg")
+                        mainHandler.post {
+                            callback(false, null, errorMsg)
+                        }
+                    }
+                    response.close()
+                } catch (e: Exception) {
+                    Log.e(TAG, "删除联系人异常：${e.message}", e)
+                    mainHandler.post {
+                        callback(false, null, e.message ?: "网络请求失败")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "构建删除联系人请求失败：${e.message}", e)
                 mainHandler.post {
                     callback(false, null, e.message ?: "请求构建失败")
                 }

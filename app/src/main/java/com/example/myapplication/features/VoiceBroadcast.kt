@@ -6,8 +6,8 @@ import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import java.util.*
 
-class TextToSpeechFeature(private val context: Context) {
-    private val TAG = "TextToSpeechFeature"
+class VoiceBroadcast(private val context: Context) {
+    private val TAG = "VoiceBroadcast"
     private var textToSpeech: TextToSpeech? = null
     private var isInitialized = false
     private var pendingText: String? = null
@@ -25,7 +25,6 @@ class TextToSpeechFeature(private val context: Context) {
                 } else {
                     isInitialized = true
                     Log.d(TAG, "TextToSpeech 初始化成功")
-                    // 如果有待播报的文本，立即播报
                     pendingText?.let {
                         speak(it)
                         pendingText = null
